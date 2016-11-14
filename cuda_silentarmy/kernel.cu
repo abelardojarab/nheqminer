@@ -1043,7 +1043,6 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 	for (unsigned round = 0; round < PARAM_K; round++) {
 		// Now on every round!!!!
 		kernel_init_ht << <NR_ROWS / ROWS_PER_UINT / 256, 256 >> >(miner->rowCounters[round & 1]);
-		cudaThreadSynchronize();
 
 		switch (round) {
 		case 0:
