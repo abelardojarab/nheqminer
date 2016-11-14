@@ -19,6 +19,7 @@ do {														\
         _SNPRINTF(errorBuff, sizeof(errorBuff) - 1,			\
 			"CUDA error '%s' in func '%s' line %d",			\
 			cudaGetErrorString(err), __FUNCTION__, __LINE__);	\
+		printf("<error> %s\n", errorBuff); \
 		}														\
 } while (0)
 
