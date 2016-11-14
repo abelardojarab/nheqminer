@@ -83,7 +83,7 @@ __constant__ ulong blake_iv[] =
 ** Reset counters in hash table.
 */
 __global__
-void kernel_init_ht(uint *rowCounters)
+void kernel_init_ht(uint* rowCounters)
 {
 	rowCounters[blockIdx.x * blockDim.x + threadIdx.x] = 0;
 }
@@ -159,11 +159,16 @@ __device__ uint ht_store(uint round, char *ht, uint i,
 	xi1 = (xi1 >> 16) | (xi2 << (64 - 16));
 	xi2 = (xi2 >> 16) | (xi3 << (64 - 16));
 	p = ht + row * NR_SLOTS * SLOT_LEN;
-	uint xcnt = atomicAdd(&rowCounters[row], 1);
+	uint rowIdx = row / ROWS_PER_UINT;
+	uint rowOffset = BITS_PER_ROW * (row & (ROWS_PER_UINT - 1));//ASSUME ROWS_PER_UINT is POWER OF 2
+	uint xcnt = atomicAdd(&rowCounters[rowIdx], 1 << rowOffset);
+	//printf("inc index %u round %u\n", rowIdx, round);
+	xcnt = (xcnt >> rowOffset) & ROW_MASK;
 	cnt = xcnt;
+	//printf("row %u rowOffset %u count is %u\n", rowIdx, rowOffset, cnt);
 	if (cnt >= NR_SLOTS) {
 		// avoid overflows
-		atomicSub(&rowCounters[row], 1);
+		atomicSub(&rowCounters[rowIdx], 1 << rowOffset);
 		return 1;
 	}
 	p += cnt * SLOT_LEN + xi_offset_for_round(round);
@@ -611,7 +616,9 @@ __device__ void equihash_round(uint round,
 	collisionsNum = 0;
 	__syncthreads();
 	p = (ht_src + tid * NR_SLOTS * SLOT_LEN);
-	cnt = rowCountersSrc[blockIdx.x * blockDim.x + threadIdx.x];
+	uint rowIdx = tid / ROWS_PER_UINT;
+	uint rowOffset = BITS_PER_ROW * (tid & (ROWS_PER_UINT - 1));
+	cnt = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
 	cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in prev. round
 	if (!cnt) {
 		// no elements in row, no collisions
@@ -829,9 +836,11 @@ void __launch_bounds__(64) kernel_sols(char *ht0, char *ht1, sols_t *sols, uint 
 #else
 #error "unsupported NR_ROWS_LOG"
 #endif
-	
+
 	a = htabs[ht_i] + tid * NR_SLOTS * SLOT_LEN;
-	cnt = rowCountersSrc[blockIdx.x * blockDim.x + threadIdx.x];
+	uint rowIdx = tid / ROWS_PER_UINT;
+	uint rowOffset = BITS_PER_ROW * (tid & (ROWS_PER_UINT - 1));
+	cnt = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
 	cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in last round
 	coll = 0;
 	a += xi_offset;
@@ -853,6 +862,7 @@ exit1:
 }
 struct __align__(64) c_context {
 	char* buf_ht[2], *buf_sols, *buf_dbg;
+	uint *rowCounters[2];
 	sols_t	*sols;
 	u32 nthreads;
 	size_t global_ws;
@@ -987,6 +997,8 @@ sa_cuda_context::sa_cuda_context(int tpb, int blocks, int id)
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_ht[0], HT_SIZE));
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_ht[1], HT_SIZE));
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_sols, sizeof(sols_t)));
+	checkCudaErrors(cudaMalloc((void**)&eq->rowCounters[0], NR_ROWS));
+	checkCudaErrors(cudaMalloc((void**)&eq->rowCounters[1], NR_ROWS));
 
 	eq->sols = (sols_t *)malloc(sizeof(sols_t));
 }
@@ -1007,13 +1019,14 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 {
 	checkCudaErrors(cudaSetDevice(device_id));
 
+
 	unsigned char context[140];
 	memset(context, 0, 140);
 	memcpy(context, tequihash_header, tequihash_header_len);
 	memcpy(context + tequihash_header_len, nonce, nonce_len);
 
 	c_context *miner = eq;
-	
+
 	//FUNCTION<<<totalblocks, threadsperblock>>>(ARGUMENTS)
 
 	blake2b_state_t initialCtx;
@@ -1023,52 +1036,47 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 	void* buf_blake_st;
 	checkCudaErrors(cudaMalloc((void**)&buf_blake_st, sizeof(blake2b_state_s)));
 	checkCudaErrors(cudaMemcpy(buf_blake_st, &initialCtx, sizeof(blake2b_state_s), cudaMemcpyHostToDevice));
-	
-	uint* rowCounters[2] = {0};
-
-	checkCudaErrors(cudaMalloc((void**)&rowCounters[0], NR_ROWS * sizeof(uint)));
-	checkCudaErrors(cudaMalloc((void**)&rowCounters[1], NR_ROWS * sizeof(uint)));
 
 	const size_t blake_work_size = select_work_size_blake() / 64;
 	const size_t round_work_size = NR_ROWS / 64;
 
 	for (unsigned round = 0; round < PARAM_K; round++) {
 		// Now on every round!!!!
-		kernel_init_ht<<<round_work_size, 64>> >(rowCounters[round & 1]);
+		kernel_init_ht << <NR_ROWS / ROWS_PER_UINT / 256, 256 >> >(miner->rowCounters[round & 1]);
 		cudaThreadSynchronize();
 
 		switch (round) {
 		case 0:
-			kernel_round0 << <blake_work_size, 64 >> >((ulong*)buf_blake_st, miner->buf_ht[round & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round0 << <blake_work_size, 64 >> >((ulong*)buf_blake_st, miner->buf_ht[round & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 1:
-			kernel_round1 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round1 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 2:
-			kernel_round2 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round2 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 3:
-			kernel_round3 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round3 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 4:
-			kernel_round4 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round4 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 5:
-			kernel_round5 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round5 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 6:
-			kernel_round6 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round6 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 7:
-			kernel_round7 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg);
+			kernel_round7 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
 			break;
 		case 8:
-			kernel_round8 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], rowCounters[(round - 1) & 1], rowCounters[round & 1], (uint*)miner->buf_dbg, (sols_t*)miner->buf_sols);
+			kernel_round8 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg, (sols_t*)miner->buf_sols);
 			break;
 		}
 		if (cancelf()) return;
 	}
-	kernel_sols<<<round_work_size, 64>>>(miner->buf_ht[0], miner->buf_ht[1], (sols_t*)miner->buf_sols, rowCounters[0], rowCounters[1]);
+	kernel_sols << <round_work_size, 64 >> >(miner->buf_ht[0], miner->buf_ht[1], (sols_t*)miner->buf_sols, miner->rowCounters[0], miner->rowCounters[1]);
 
 	checkCudaErrors(cudaMemcpy(miner->sols, miner->buf_sols, sizeof(sols_t), cudaMemcpyDeviceToHost));
 
@@ -1078,6 +1086,8 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 	for (unsigned sol_i = 0; sol_i < miner->sols->nr; sol_i++) {
 		verify_sol(miner->sols, sol_i);
 	}
+
+	checkCudaErrors(cudaFree(buf_blake_st));
 
 	uint8_t proof[COMPRESSED_PROOFSIZE * 2];
 	for (uint32_t i = 0; i < miner->sols->nr; i++) {
