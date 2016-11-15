@@ -79,14 +79,27 @@ __constant__ ulong blake_iv[] =
 };
 
 
+__device__ uint32_t rowCounter0[NR_ROWS];
+__device__ uint32_t rowCounter1[NR_ROWS];
+__device__ blake2b_state_t blake;
+__device__ sols_t sols;
+
+
 /*
 ** Reset counters in hash table.
 */
 __global__
-void kernel_init_ht(uint* rowCounters)
+void kernel_init_ht0()
 {
-	rowCounters[blockIdx.x * blockDim.x + threadIdx.x] = 0;
+	rowCounter0[blockIdx.x * blockDim.x + threadIdx.x] = 0;
 }
+
+__global__
+void kernel_init_ht1()
+{
+	rowCounter1[blockIdx.x * blockDim.x + threadIdx.x] = 0;
+}
+
 
 /*
 ** If xi0,xi1,xi2,xi3 are stored consecutively in little endian then they
@@ -159,16 +172,13 @@ __device__ uint ht_store(uint round, char *ht, uint i,
 	xi1 = (xi1 >> 16) | (xi2 << (64 - 16));
 	xi2 = (xi2 >> 16) | (xi3 << (64 - 16));
 	p = ht + row * NR_SLOTS * SLOT_LEN;
-	uint rowIdx = row / ROWS_PER_UINT;
-	uint rowOffset = BITS_PER_ROW * (row & (ROWS_PER_UINT - 1));//ASSUME ROWS_PER_UINT is POWER OF 2
-	uint xcnt = atomicAdd(&rowCounters[rowIdx], 1 << rowOffset);
+	uint xcnt = atomicAdd(&rowCounters[row], 1);
 	//printf("inc index %u round %u\n", rowIdx, round);
-	xcnt = (xcnt >> rowOffset) & ROW_MASK;
 	cnt = xcnt;
 	//printf("row %u rowOffset %u count is %u\n", rowIdx, rowOffset, cnt);
 	if (cnt >= NR_SLOTS) {
 		// avoid overflows
-		atomicSub(&rowCounters[rowIdx], 1 << rowOffset);
+		atomicSub(&rowCounters[row], 1);
 		return 1;
 	}
 	p += cnt * SLOT_LEN + xi_offset_for_round(round);
@@ -242,7 +252,7 @@ vb = rotate((vb ^ vc), (ulong)64 - 63);
 ** http://developer.amd.com/tools-and-sdks/opencl-zone/amd-accelerated-parallel-processing-app-sdk/opencl-optimization-guide/
 */
 __global__
-void __launch_bounds__(64) kernel_round0(ulong *blake_state, char *ht, uint *rowCounters, uint *debug)
+void kernel_round0(char *ht, uint *debug)
 {
 	uint                tid = blockIdx.x * blockDim.x + threadIdx.x;
 	ulong               v[16];
@@ -258,14 +268,14 @@ void __launch_bounds__(64) kernel_round0(ulong *blake_state, char *ht, uint *row
 		// message block
 		ulong word1 = (ulong)input << 32;
 		// init vector v
-		v[0] = blake_state[0];
-		v[1] = blake_state[1];
-		v[2] = blake_state[2];
-		v[3] = blake_state[3];
-		v[4] = blake_state[4];
-		v[5] = blake_state[5];
-		v[6] = blake_state[6];
-		v[7] = blake_state[7];
+		v[0] = blake.h[0];
+		v[1] = blake.h[1];
+		v[2] = blake.h[2];
+		v[3] = blake.h[3];
+		v[4] = blake.h[4];
+		v[5] = blake.h[5];
+		v[6] = blake.h[6];
+		v[7] = blake.h[7];
 		v[8] = blake_iv[0];
 		v[9] = blake_iv[1];
 		v[10] = blake_iv[2];
@@ -391,13 +401,13 @@ void __launch_bounds__(64) kernel_round0(ulong *blake_state, char *ht, uint *row
 		// compress v into the blake state; this produces the 50-byte hash
 		// (two Xi values)
 		ulong h[7];
-		h[0] = blake_state[0] ^ v[0] ^ v[8];
-		h[1] = blake_state[1] ^ v[1] ^ v[9];
-		h[2] = blake_state[2] ^ v[2] ^ v[10];
-		h[3] = blake_state[3] ^ v[3] ^ v[11];
-		h[4] = blake_state[4] ^ v[4] ^ v[12];
-		h[5] = blake_state[5] ^ v[5] ^ v[13];
-		h[6] = (blake_state[6] ^ v[6] ^ v[14]) & 0xffff;
+		h[0] = blake.h[0] ^ v[0] ^ v[8];
+		h[1] = blake.h[1] ^ v[1] ^ v[9];
+		h[2] = blake.h[2] ^ v[2] ^ v[10];
+		h[3] = blake.h[3] ^ v[3] ^ v[11];
+		h[4] = blake.h[4] ^ v[4] ^ v[12];
+		h[5] = blake.h[5] ^ v[5] ^ v[13];
+		h[6] = (blake.h[6] ^ v[6] ^ v[14]) & 0xffff;
 
 		// store the two Xi values in the hash table
 #if ZCASH_HASH_LEN == 50
@@ -405,12 +415,12 @@ void __launch_bounds__(64) kernel_round0(ulong *blake_state, char *ht, uint *row
 			h[0],
 			h[1],
 			h[2],
-			h[3], rowCounters);
+			h[3], rowCounter0);
 		dropped += ht_store(0, ht, input * 2 + 1,
 			(h[3] >> 8) | (h[4] << (64 - 8)),
 			(h[4] >> 8) | (h[5] << (64 - 8)),
 			(h[5] >> 8) | (h[6] << (64 - 8)),
-			(h[6] >> 8), rowCounters);
+			(h[6] >> 8), rowCounter0);
 #else
 #error "unsupported ZCASH_HASH_LEN"
 #endif
@@ -566,7 +576,48 @@ __device__ uint xor_and_store(uint round, char *ht_dst, uint row,
 		xi0, xi1, xi2, 0, rowCounters);
 }
 
-//__shared__ uint collisionsNum;
+__device__ void equihash_round_cm3(uint round,
+	char *ht_src,
+	char *ht_dst,
+	uint *rowCountersSrc,
+	uint *rowCountersDst)
+{
+	uint                tid = blockIdx.x * blockDim.x + threadIdx.x;
+	char				*p;
+	uint                cnt;
+	uint                i, j;
+	uint				dropped_stor = 0;
+	ulong				*a, *b;
+	uint				xi_offset;
+	static uint			size = NR_ROWS;
+	static uint			stride = NR_SLOTS * SLOT_LEN;
+	xi_offset = (8 + ((round - 1) / 2) * 4);
+
+	for (uint ii = tid; ii < size; ii += (blockDim.x * gridDim.x)) {
+		p = ht_src + ii * stride;
+		cnt = rowCountersSrc[ii];
+		cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in prev. round
+		if (!cnt) {// no elements in row, no collisions
+			continue;
+		}
+		// find collisions
+		for (i = 0; i < cnt; i++) {
+			for (j = i + 1; j < cnt; j++)
+			{
+				a = (ulong *)
+					(ht_src + ii * stride + i * 32 + xi_offset);
+				b = (ulong *)
+					(ht_src + ii * stride + j * 32 + xi_offset);
+				dropped_stor += xor_and_store(round, ht_dst, ii, i, j, a, b, rowCountersDst);
+			}
+		}
+		//if (round < 8) {
+		// reset the counter in preparation of the next round
+		//rowCountersSrc[ii] = 0;//might be doing this already
+		//*(uint *)(ht_src + ii * ((1 << (((200 / (9 + 1)) + 1) - 20)) * 6) * 32) = 0;
+		//}
+	}
+}
 
 /*
 ** Execute one Equihash round. Read from ht_src, XOR colliding pairs of Xi,
@@ -616,9 +667,7 @@ __device__ void equihash_round(uint round,
 	collisionsNum = 0;
 	__syncthreads();
 	p = (ht_src + tid * NR_SLOTS * SLOT_LEN);
-	uint rowIdx = tid / ROWS_PER_UINT;
-	uint rowOffset = BITS_PER_ROW * (tid & (ROWS_PER_UINT - 1));
-	cnt = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
+	cnt = rowCountersSrc[tid];
 	cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in prev. round
 	if (!cnt) {
 		// no elements in row, no collisions
@@ -711,34 +760,74 @@ part2:
 /*
 ** This defines kernel_round1, kernel_round2, ..., kernel_round7.
 */
-#define KERNEL_ROUND(N) \
+#define KERNEL_ROUND_ODD(N) \
 __global__  \
-void __launch_bounds__(64) kernel_round ## N( char *ht_src,  char *ht_dst, \
-	 uint *rowCountersSrc,  uint *rowCountersDst, \
-       	 uint *debug) \
+void kernel_round ## N( char *ht_src,  char *ht_dst, uint *debug) \
 { \
-    equihash_round(N, ht_src, ht_dst, debug, rowCountersSrc, rowCountersDst); \
+    equihash_round(N, ht_src, ht_dst, debug, rowCounter0, rowCounter1); \
 }
-KERNEL_ROUND(1)
-KERNEL_ROUND(2)
-KERNEL_ROUND(3)
-KERNEL_ROUND(4)
-KERNEL_ROUND(5)
-KERNEL_ROUND(6)
-KERNEL_ROUND(7)
+
+#define KERNEL_ROUND_EVEN(N) \
+__global__  \
+void kernel_round ## N( char *ht_src,  char *ht_dst, uint *debug) \
+{ \
+    equihash_round(N, ht_src, ht_dst, debug, rowCounter1, rowCounter0); \
+}
+
+#define KERNEL_ROUND_ODD_OLD(N) \
+__global__  \
+void kernel_round_cm3_ ## N( char *ht_src,  char *ht_dst) \
+{ \
+    equihash_round_cm3(N, ht_src, ht_dst, rowCounter0, rowCounter1); \
+}
+
+
+#define KERNEL_ROUND_EVEN_OLD(N) \
+__global__  \
+void kernel_round_cm3_ ## N(char *ht_src,  char *ht_dst) \
+{ \
+    equihash_round_cm3(N, ht_src, ht_dst, rowCounter1, rowCounter0); \
+}
+
+
+KERNEL_ROUND_ODD(1)
+KERNEL_ROUND_EVEN(2)
+KERNEL_ROUND_ODD(3)
+KERNEL_ROUND_EVEN(4)
+KERNEL_ROUND_ODD(5)
+KERNEL_ROUND_EVEN(6)
+KERNEL_ROUND_ODD(7)
+
+KERNEL_ROUND_ODD_OLD(1)
+KERNEL_ROUND_EVEN_OLD(2)
+KERNEL_ROUND_ODD_OLD(3)
+KERNEL_ROUND_EVEN_OLD(4)
+KERNEL_ROUND_ODD_OLD(5)
+KERNEL_ROUND_EVEN_OLD(6)
+KERNEL_ROUND_ODD_OLD(7)
+
 
 // kernel_round8 takes an extra argument, "sols"
 __global__
-void __launch_bounds__(64) kernel_round8(char *ht_src, char *ht_dst,
-	uint *rowCountersSrc, uint *rowCountersDst,
-	uint *debug, sols_t *sols)
+void kernel_round8(char *ht_src, char *ht_dst, uint *debug)
 {
 	uint		tid = blockIdx.x * blockDim.x + threadIdx.x;
-	equihash_round(8, ht_src, ht_dst, debug, rowCountersSrc, rowCountersDst);
+	equihash_round(8, ht_src, ht_dst, debug, rowCounter1, rowCounter0);
 	if (!tid) {
-		sols->nr = sols->likely_invalids = 0;
+		sols.nr = sols.likely_invalids = 0;
 	}
 }
+
+__global__
+void kernel_round_cm3_8(char *ht_src, char *ht_dst)
+{
+	uint tid = blockIdx.x * blockDim.x + threadIdx.x;
+	equihash_round_cm3(8, ht_src, ht_dst, rowCounter1, rowCounter0);
+	if (!tid) {
+		sols.nr = sols.likely_invalids = 0;
+	}
+}
+
 
 __device__ uint expand_ref(char *ht, uint xi_offset, uint row, uint slot)
 {
@@ -783,8 +872,7 @@ __device__ uint expand_refs(uint *ins, uint nr_inputs, char **htabs,
 /*
 ** Verify if a potential solution is in fact valid.
 */
-__device__ void potential_sol(char **htabs, sols_t *sols,
-	uint ref0, uint ref1)
+__device__ void potential_sol(char **htabs, uint ref0, uint ref1)
 {
 	uint	nr_values;
 	uint	values_tmp[(1 << PARAM_K)];
@@ -802,23 +890,22 @@ __device__ void potential_sol(char **htabs, sols_t *sols,
 		nr_values *= 2;
 	} while (round > 0);
 	// solution appears valid, copy it to sols
-	sol_i = atomicAdd(&sols->nr, 1);
+	sol_i = atomicAdd(&sols.nr, 1);
 	if (sol_i >= MAX_SOLS)
 		return;
 	for (i = 0; i < (1 << PARAM_K); i++)
-		sols->values[sol_i][i] = values_tmp[i];
-	sols->valid[sol_i] = 1;
+		sols.values[sol_i][i] = values_tmp[i];
+	sols.valid[sol_i] = 1;
 }
 
 /*
 ** Scan the hash tables to find Equihash solutions.
 */
 __global__
-void __launch_bounds__(64) kernel_sols(char *ht0, char *ht1, sols_t *sols, uint *rowCountersSrc, uint *rowCountersDst)
+void kernel_sols(char *ht0, char *ht1)
 {
 	uint		tid = blockIdx.x * blockDim.x + threadIdx.x;
 	char	*htabs[2] = { ht0, ht1 };
-	uint	*hcounters[2] = { rowCountersSrc, rowCountersDst };
 	uint		ht_i = (PARAM_K - 1) & 1; // table filled at last round
 	uint		cnt;
 	uint		xi_offset = xi_offset_for_round(PARAM_K - 1);
@@ -838,9 +925,7 @@ void __launch_bounds__(64) kernel_sols(char *ht0, char *ht1, sols_t *sols, uint 
 #endif
 
 	a = htabs[ht_i] + tid * NR_SLOTS * SLOT_LEN;
-	uint rowIdx = tid / ROWS_PER_UINT;
-	uint rowOffset = BITS_PER_ROW * (tid & (ROWS_PER_UINT - 1));
-	cnt = (rowCountersSrc[rowIdx] >> rowOffset) & ROW_MASK;
+	cnt = rowCounter0[tid];
 	cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in last round
 	coll = 0;
 	a += xi_offset;
@@ -858,15 +943,14 @@ void __launch_bounds__(64) kernel_sols(char *ht0, char *ht1, sols_t *sols, uint 
 	return;
 
 exit1:
-	potential_sol(htabs, sols, collisions >> 32, collisions & 0xffffffff);
+	potential_sol(htabs, collisions >> 32, collisions & 0xffffffff);
 }
 struct __align__(64) c_context {
-	char* buf_ht[2], *buf_sols, *buf_dbg;
-	uint *rowCounters[2];
-	sols_t	*sols;
+	char* buf_ht[2], *buf_dbg;
+	//uint *rowCounters[2];
+	//sols_t	*sols;
 	u32 nthreads;
 	size_t global_ws;
-
 
 	c_context(const u32 n_threads) {
 		nthreads = n_threads;
@@ -984,7 +1068,7 @@ sa_cuda_context::sa_cuda_context(int tpb, int blocks, int id)
 	checkCudaErrors(cudaSetDevice(device_id));
 	checkCudaErrors(cudaDeviceReset());
 	checkCudaErrors(cudaSetDeviceFlags(cudaDeviceScheduleBlockingSync));
-	checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferL1));
+	checkCudaErrors(cudaDeviceSetCacheConfig(cudaFuncCachePreferShared));
 
 	eq = new c_context(threadsperblock * totalblocks);
 #ifdef ENABLE_DEBUG
@@ -996,11 +1080,8 @@ sa_cuda_context::sa_cuda_context(int tpb, int blocks, int id)
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_dbg, dbg_size));
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_ht[0], HT_SIZE));
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_ht[1], HT_SIZE));
-	checkCudaErrors(cudaMalloc((void**)&eq->buf_sols, sizeof(sols_t)));
-	checkCudaErrors(cudaMalloc((void**)&eq->rowCounters[0], NR_ROWS));
-	checkCudaErrors(cudaMalloc((void**)&eq->rowCounters[1], NR_ROWS));
-
-	eq->sols = (sols_t *)malloc(sizeof(sols_t));
+	checkCudaErrors(cudaDeviceSynchronize());
+	//eq->sols = (sols_t *)malloc(sizeof(sols_t));
 }
 
 sa_cuda_context::~sa_cuda_context()
@@ -1015,9 +1096,108 @@ checkCudaErrors(cudaPeekAtLastError()); \
 checkCudaErrors(cudaDeviceSynchronize());
 
 
+static inline void solve_new(c_context *miner, unsigned round)
+{
+	constexpr uint32_t THREAD_SHIFT = 10;
+	constexpr uint32_t THREAD_COUNT = 1 << THREAD_SHIFT;
+	constexpr uint32_t DIM_SIZE = (1 << 20) >> THREAD_SHIFT;
+
+
+	// Now on every round!!!!
+	switch (round) {
+	case 0:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round0 << <1024, 64 >> >(miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 1:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round1 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 2:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round2 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 3:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round3 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 4:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round4 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 5:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round5 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 6:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round6 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 7:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round7 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 8:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round8 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	}
+}
+
+static inline void solve_old(unsigned round, c_context *miner)
+{
+	constexpr uint32_t THREAD_SHIFT = 10;
+	constexpr uint32_t THREAD_COUNT = 1 << THREAD_SHIFT;
+	constexpr uint32_t DIM_SIZE = (1 << 20) >> THREAD_SHIFT;
+	// Now on every round!!!!
+	switch (round) {
+	case 0:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round0 << <1024, 64 >> >(miner->buf_ht[round & 1], (uint*)miner->buf_dbg);
+		break;
+	case 1:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_1 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	case 2:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_2 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	case 3:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_3 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	case 4:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_4 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	case 5:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_5 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	case 6:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_6 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	case 7:
+		kernel_init_ht1 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_7 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	case 8:
+		kernel_init_ht0 << <DIM_SIZE, THREAD_COUNT >> > ();
+		kernel_round_cm3_8 << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1]);
+		break;
+	}
+}
+
+#include <fstream>
 void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihash_header_len, const char * nonce, unsigned int nonce_len, std::function<bool()> cancelf, std::function<void(const std::vector<uint32_t>&, size_t, const unsigned char*)> solutionf, std::function<void(void)> hashdonef)
 {
 	checkCudaErrors(cudaSetDevice(device_id));
+	cudaDeviceProp prop;
+	checkCudaErrors(cudaGetDeviceProperties(&prop, device_id));
+
+	bool bUseOld = prop.major < 5;
 
 
 	unsigned char context[140];
@@ -1033,65 +1213,33 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 	zcash_blake2b_init(&initialCtx, ZCASH_HASH_LEN, PARAM_N, PARAM_K);
 	zcash_blake2b_update(&initialCtx, (const uint8_t*)context, 128, 0);
 
-	void* buf_blake_st;
-	checkCudaErrors(cudaMalloc((void**)&buf_blake_st, sizeof(blake2b_state_s)));
-	checkCudaErrors(cudaMemcpy(buf_blake_st, &initialCtx, sizeof(blake2b_state_s), cudaMemcpyHostToDevice));
-
-	const size_t blake_work_size = select_work_size_blake() / 64;
-	const size_t round_work_size = NR_ROWS / 64;
+	checkCudaErrors(cudaMemcpyToSymbol(blake, &initialCtx, sizeof(blake2b_state_s), 0, cudaMemcpyHostToDevice));
 
 	for (unsigned round = 0; round < PARAM_K; round++) {
-		// Now on every round!!!!
-		kernel_init_ht << <NR_ROWS / ROWS_PER_UINT / 256, 256 >> >(miner->rowCounters[round & 1]);
-
-		switch (round) {
-		case 0:
-			kernel_round0 << <blake_work_size, 64 >> >((ulong*)buf_blake_st, miner->buf_ht[round & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 1:
-			kernel_round1 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 2:
-			kernel_round2 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 3:
-			kernel_round3 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 4:
-			kernel_round4 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 5:
-			kernel_round5 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 6:
-			kernel_round6 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 7:
-			kernel_round7 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg);
-			break;
-		case 8:
-			kernel_round8 << <round_work_size, 64 >> >(miner->buf_ht[(round - 1) & 1], miner->buf_ht[round & 1], miner->rowCounters[(round - 1) & 1], miner->rowCounters[round & 1], (uint*)miner->buf_dbg, (sols_t*)miner->buf_sols);
-			break;
+		if (bUseOld) {
+			solve_old(round, miner);
+		} else {
+			solve_new(miner, round);
 		}
 		if (cancelf()) return;
 	}
-	kernel_sols << <round_work_size, 64 >> >(miner->buf_ht[0], miner->buf_ht[1], (sols_t*)miner->buf_sols, miner->rowCounters[0], miner->rowCounters[1]);
+	kernel_sols << <NR_ROWS >> 6, 64 >> >(miner->buf_ht[0], miner->buf_ht[1]);
 
-	checkCudaErrors(cudaMemcpy(miner->sols, miner->buf_sols, sizeof(sols_t), cudaMemcpyDeviceToHost));
+	sols_t l_sols;
 
-	if (miner->sols->nr > MAX_SOLS)
-		miner->sols->nr = MAX_SOLS;
+	checkCudaErrors(cudaMemcpyFromSymbol(&l_sols, sols, sizeof(sols_t), 0, cudaMemcpyDeviceToHost));
 
-	for (unsigned sol_i = 0; sol_i < miner->sols->nr; sol_i++) {
-		verify_sol(miner->sols, sol_i);
+	if (l_sols.nr > MAX_SOLS)
+		l_sols.nr = MAX_SOLS;
+
+	for (unsigned sol_i = 0; sol_i < l_sols.nr; sol_i++) {
+		verify_sol(&l_sols, sol_i);
 	}
 
-	checkCudaErrors(cudaFree(buf_blake_st));
-
 	uint8_t proof[COMPRESSED_PROOFSIZE * 2];
-	for (uint32_t i = 0; i < miner->sols->nr; i++) {
-		if (miner->sols->valid[i]) {
-			compress(proof, (uint32_t *)(miner->sols->values[i]), 1 << PARAM_K);
+	for (uint32_t i = 0; i < l_sols.nr; i++) {
+		if (l_sols.valid[i]) {
+			compress(proof, (uint32_t *)(l_sols.values[i]), 1 << PARAM_K);
 			solutionf(std::vector<uint32_t>(0), 1344, proof);
 		}
 	}

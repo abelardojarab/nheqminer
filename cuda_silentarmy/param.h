@@ -11,7 +11,7 @@
 #define OPTIM_SIMPLIFY_ROUND		1
 
 // Number of collision items to track, per thread
-#define COLL_DATA_SIZE_PER_TH		(NR_SLOTS * 1)
+#define COLL_DATA_SIZE_PER_TH		(NR_SLOTS * 5)
 
 // Make hash tables OVERHEAD times larger than necessary to store the average
 // number of elements per row. The ideal value is as small as possible to
