@@ -1,17 +1,27 @@
+#define THRD 32
 #define PARAM_N				200
 #define PARAM_K				9
 #define PREFIX                          (PARAM_N / (PARAM_K + 1))
 #define NR_INPUTS                       (1 << PREFIX)
 // Approximate log base 2 of number of elements in hash tables
 #define APX_NR_ELMS_LOG                 (PREFIX + 1)
-// Number of rows and slots is affected by this; 20 offers the best performance
-#define NR_ROWS_LOG                     20
+// Number of rows and slots is affected by this. 20 offers the best performance
+// but occasionally misses ~1% of solutions.
+#define NR_ROWS_LOG                     16
 
 // Setting this to 1 might make SILENTARMY faster, see TROUBLESHOOTING.md
 #define OPTIM_SIMPLIFY_ROUND		1
 
 // Number of collision items to track, per thread
-#define COLL_DATA_SIZE_PER_TH		(NR_SLOTS * 5)
+#define THREADS_PER_ROW 16
+#define ROWS_PER_WORKGROUP (THRD/THREADS_PER_ROW)
+#define LDS_COLL_SIZE (NR_SLOTS * 15 * (THRD / THREADS_PER_ROW))
+
+// Ratio of time of sleeping before rechecking if task is done (0-1)
+#define SLEEP_RECHECK_RATIO 0.60
+// Ratio of time to busy wait for the solution (0-1)
+// The higher value the higher CPU usage with Nvidia
+#define SLEEP_SKIP_RATIO 0.005
 
 // Make hash tables OVERHEAD times larger than necessary to store the average
 // number of elements per row. The ideal value is as small as possible to
@@ -25,12 +35,18 @@
 // Even (as opposed to odd) values of OVERHEAD sometimes significantly decrease
 // performance as they cause VRAM channel conflicts.
 #if NR_ROWS_LOG == 16
-#error "NR_ROWS_LOG = 16 is currently broken - do not use"
-#define OVERHEAD                        3
+// #error "NR_ROWS_LOG = 16 is currently broken - do not use"
+#define OVERHEAD                        2
+#define COLLISION_TYPES_NUM             16u
+#define COLLISION_BUFFER_SIZE           16u
 #elif NR_ROWS_LOG == 18
-#define OVERHEAD                        3
+#define OVERHEAD                        4
+#define COLLISION_TYPES_NUM             4u
+#define COLLISION_BUFFER_SIZE           16u
 #elif NR_ROWS_LOG == 19
 #define OVERHEAD                        5
+#define COLLISION_TYPES_NUM             2u
+#define COLLISION_BUFFER_SIZE           16u
 #elif NR_ROWS_LOG == 20 && OPTIM_SIMPLIFY_ROUND
 #define OVERHEAD                        6
 #elif NR_ROWS_LOG == 20
@@ -38,8 +54,8 @@
 #endif
 
 #define NR_ROWS                         (1 << NR_ROWS_LOG)
-#define NR_SLOTS            ((1 << (APX_NR_ELMS_LOG - NR_ROWS_LOG)) * OVERHEAD)
-// Length of 1 element (slot) in bytes
+#define NR_SLOTS            (((1 << (APX_NR_ELMS_LOG - NR_ROWS_LOG)) * OVERHEAD))
+// Length of 1 element (slot) in byte
 #define SLOT_LEN                        32
 // Total size of hash table
 #define HT_SIZE				(NR_ROWS * NR_SLOTS * SLOT_LEN)
@@ -89,3 +105,19 @@
 
 // An (uncompressed) solution stores (1 << PARAM_K) 32-bit values
 #define SOL_SIZE			((1 << PARAM_K) * 4)
+
+
+typedef unsigned int uint;
+typedef unsigned char uchar;
+typedef unsigned long long  ulong;
+typedef unsigned short ushort;
+typedef uint32_t u32;
+
+
+typedef struct	sols_s
+{
+	uint	nr;
+	uint	likely_invalids;
+	uchar	valid[MAX_SOLS];
+	uint	values[MAX_SOLS][(1 << PARAM_K)];
+}		sols_t;
