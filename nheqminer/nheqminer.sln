@@ -28,6 +28,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ocl_silentarmy", "..\ocl_si
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cuda_silentarmy", "..\cuda_silentarmy\cuda_silentarmy.vcxproj", "{76AC1E54-C6AC-465B-AF41-416B2C3874C1}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cuda_silentarmy_sm30", "..\cuda_silentarmy_sm30\cuda_silentarmy_sm30.vcxproj", "{53E62B3D-3FA6-4B53-8175-2B93753D98C4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Mixed Platforms = Debug|Mixed Platforms
@@ -164,6 +166,24 @@ Global
 		{76AC1E54-C6AC-465B-AF41-416B2C3874C1}.ReleaseSlow|Win32.Build.0 = Release|Win32
 		{76AC1E54-C6AC-465B-AF41-416B2C3874C1}.ReleaseSlow|x64.ActiveCfg = Release|x64
 		{76AC1E54-C6AC-465B-AF41-416B2C3874C1}.ReleaseSlow|x64.Build.0 = Release|x64
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Debug|Win32.ActiveCfg = Debug|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Debug|Win32.Build.0 = Debug|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Debug|x64.ActiveCfg = Debug|x64
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Debug|x64.Build.0 = Debug|x64
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Release|Win32.ActiveCfg = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Release|Win32.Build.0 = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Release|x64.ActiveCfg = Release|x64
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.Release|x64.Build.0 = Release|x64
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.ReleaseSlow|Mixed Platforms.ActiveCfg = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.ReleaseSlow|Mixed Platforms.Build.0 = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.ReleaseSlow|Win32.ActiveCfg = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.ReleaseSlow|Win32.Build.0 = Release|Win32
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.ReleaseSlow|x64.ActiveCfg = Release|x64
+		{53E62B3D-3FA6-4B53-8175-2B93753D98C4}.ReleaseSlow|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
