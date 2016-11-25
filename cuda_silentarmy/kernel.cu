@@ -362,7 +362,6 @@ __device__ uint ht_store(uint round, char *ht, uint i,
 	return 0;
 }
 
-
 // 64-bit ROTATE LEFT
 #if __CUDA_ARCH__ >= 320
 __device__ __forceinline__
@@ -633,6 +632,7 @@ void kernel_round0(char *ht, uint *debug)
 #error "unsupported NR_ROWS_LOG"
 #endif
 
+
 __device__ uint read_uint_once(uint *p) {
 	uint r;
 	asm volatile("ld.global.cg.b32  %0, [%1];\n\t" : "=r"(r) : "l"(p));
@@ -777,8 +777,7 @@ __device__ uint get_row_nr_8(ulong xi0, uint round) {
 	return row;
 }
 
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320
 
 __device__ void store8(char *p, ulong store) {
 	asm volatile ("st.global.cs.b64  [%0], %1;\n\t" :: "l"(p), "l" (store));
@@ -838,6 +837,7 @@ __device__ uint load4(ulong *p, int offset) {
 __device__ void trigger_err() {
 	load8_last((ulong *)-1, 0);
 }
+
 #else//COMPUTE 20, 30  this will be slower, unfortunetly
 
 __device__ uint load4(ulong *p, int offset) {
@@ -873,7 +873,6 @@ __device__ void store8(char *p, ulong store) {
 }
 
 
-#endif
 #endif
 
 
@@ -1022,9 +1021,7 @@ __device__ uint xor_and_store2(uint round, char *ht_dst, uint x_row,
 
 	uint _xi0l, _xi0h, _xi1l, _xi1h, _xi2l, _xi2h;
 
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
-
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320
 	asm("{\n\t"
 		".reg .b32 a0,a1,b0,b1,c0,c1; \n\t"
 		"mov.b64 {a0,a1}, %6;\n\t"
@@ -1056,7 +1053,6 @@ __device__ uint xor_and_store2(uint round, char *ht_dst, uint x_row,
 		"}\n\t" : "=r"(_xi0l), "=r"(_xi0h), "=r"(_xi1l), "=r"(_xi1h), "=r"(_xi2l), "=r"(_row) :
 		"l"(xi0), "l"(xi1), "l"(xi2));
 
-#endif
 #endif
 	row = get_row_nr_4(_row, round);
 
@@ -1158,8 +1154,7 @@ __device__ uint xor_and_store3(uint round, char *ht_dst, uint x_row,
 
 	uint _xi0l, _xi0h, _xi1l, _xi1h;
 
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320
 	asm("{\n\t"
 		"shf.r.clamp.b32 %0,%4,%5,16; \n\t"
 		"shf.r.clamp.b32 %1,%5,%6,16; \n\t"
@@ -1178,7 +1173,6 @@ __device__ uint xor_and_store3(uint round, char *ht_dst, uint x_row,
 		"}\n\t"
 		: "=r"(_xi0l), "=r"(_xi0h), "=r"(_xi1l), "=r"(_xi1h) :
 		"r"(xi0l), "r"(xi0h), "r"(xi1l), "r"(xi1h), "r"(xi2l));
-#endif
 #endif
 
 	//        xi0 = (xi0 >> 16) | (xi1 << (64 - 16));
@@ -1259,8 +1253,7 @@ __device__ uint xor_and_store4(uint round, char *ht_dst, uint x_row,
 
 	uint _xi0l, _xi0h, _xi1l, _xi1h, _xi2l, _xi2h;
 	//256bit shift
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320	
 	asm("{\n\t"
 		"shf.r.clamp.b32 %0,%4,%5,24; \n\t"
 		"shf.r.clamp.b32 %1,%5,%6,24; \n\t"
@@ -1279,7 +1272,6 @@ __device__ uint xor_and_store4(uint round, char *ht_dst, uint x_row,
 		"}\n\t"
 		: "=r"(_xi0l), "=r"(_xi0h), "=r"(_xi1l), "=r"(_xi1h) :
 		"r"(xi0l), "r"(xi0h), "r"(xi1l), "r"(xi1h));
-#endif
 #endif
 	row = get_row_nr_4(xi0l >> 8, round);
 
@@ -1328,6 +1320,8 @@ __device__ uint xor_and_store4(uint round, char *ht_dst, uint x_row,
 }
 
 
+
+
 // Round 5
 
 __device__ uint xor_and_store5(uint round, char *ht_dst, uint x_row,
@@ -1361,9 +1355,7 @@ __device__ uint xor_and_store5(uint round, char *ht_dst, uint x_row,
 	uint _xi0l, _xi0h, _xi1l, _xi1h, _xi2l, _xi2h;
 
 	//256bit shift
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
-
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320
 	asm("{\n\t"
 		"shf.r.clamp.b32 %0,%4,%5,16; \n\t"
 		"shf.r.clamp.b32 %1,%5,%6,16; \n\t"
@@ -1383,7 +1375,6 @@ __device__ uint xor_and_store5(uint round, char *ht_dst, uint x_row,
 		: "=r"(_xi0l), "=r"(_xi0h), "=r"(_xi1l), "=r"(_xi1h) :
 		"r"(xi0l), "r"(xi0h), "r"(xi1l), "r"(xi1h));
 
-#endif
 #endif
 
 	row = get_row_nr_4(xi0l, round);
@@ -1466,9 +1457,7 @@ __device__ uint xor_and_store6(uint round, char *ht_dst, uint x_row,
 
 	uint _xi0l, _xi0h, _xi1l, _xi1h;
 
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
-
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320
 	asm("{\n\t"
 		"shf.r.clamp.b32 %0,%3,%4,24; \n\t"
 		"shf.r.clamp.b32 %1,%4,%5,24; \n\t"
@@ -1485,7 +1474,6 @@ __device__ uint xor_and_store6(uint round, char *ht_dst, uint x_row,
 		"}\n\t"
 		: "=r"(_xi0l), "=r"(_xi0h), "=r"(_xi1l) :
 		"r"(xi0l), "r"(xi0h), "r"(xi1l));
-#endif
 #endif
 
 	row = get_row_nr_4(xi0l >> 8, round);
@@ -1550,9 +1538,7 @@ __device__ uint xor_and_store7(uint round, char *ht_dst, uint x_row,
 
 	uint _xi0l, _xi0h;
 
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
-
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320
 	asm("{\n\t"
 		"shf.r.clamp.b32 %0,%2,%3,16; \n\t"
 		"shr.b32         %1,%3,16; \n\t"
@@ -1569,7 +1555,6 @@ __device__ uint xor_and_store7(uint round, char *ht_dst, uint x_row,
 		: "=r"(_xi0l), "=r"(_xi0h) :
 		"r"(xi0l), "r"(xi0h));
 
-#endif
 #endif
 
 
@@ -1625,8 +1610,7 @@ __device__ uint xor_and_store8(uint round, char *ht_dst, uint x_row,
 	row = get_row_nr_4(xi0l >> 8, round);
 	uint _xi0l, _xi0h, _xi1l, _xi1h;
 
-#ifdef __CUDACC__
-#if __CUDA_ARCH__ >= 320
+#if !defined(__CUDACC__) || __CUDA_ARCH__ >= 320
 	asm("{\n\t"
 		"shf.r.clamp.b32 %0,%1,%2,24; \n\t"
 		"}\n\t"
@@ -1640,7 +1624,6 @@ __device__ uint xor_and_store8(uint round, char *ht_dst, uint x_row,
 		: "=r"(_xi0l) :
 		"r"(xi0l), "r"(xi0h));
 
-#endif
 #endif
 	//
 
@@ -1781,8 +1764,6 @@ __device__ void equihash_round_cm3(uint round, char *ht_src, char *ht_dst, uint 
 	}
 }
 
-#ifdef  __CUDACC__
-#if __CUDA_ARCH__ >= 320
 /*
 ** Execute one Equihash round. Read from ht_src, XOR colliding pairs of Xi,
 ** store them in ht_dst.
@@ -1942,20 +1923,6 @@ void kernel_round8(char *ht_src, char *ht_dst)
 	if (!tid)
 		sols.nr = sols.likely_invalids = 0;
 }
-
-#else
-
-#define kernel_round1 kernel_round_cm3_1
-#define kernel_round2 kernel_round_cm3_2
-#define kernel_round3 kernel_round_cm3_3
-#define kernel_round4 kernel_round_cm3_4
-#define kernel_round5 kernel_round_cm3_5
-#define kernel_round6 kernel_round_cm3_6
-#define kernel_round7 kernel_round_cm3_7
-#define kernel_round8 kernel_round_cm3_8
-
-#endif
-#endif
 
 #define KERNEL_ROUND_ODD_OLD(N) \
 __global__  \
@@ -2387,10 +2354,6 @@ checkCudaErrors(cudaDeviceSynchronize());
 
 static inline void solve_new(c_context *miner, unsigned round)
 {
-	constexpr uint32_t THREAD_SHIFT = 7;
-	constexpr uint32_t THREAD_COUNT = 1 << THREAD_SHIFT;
-	constexpr uint32_t DIM_SIZE = NR_ROWS >> THREAD_SHIFT;
-
 	constexpr uint32_t INIT_THREADS = 256;
 	constexpr uint32_t INIT_DIM = NR_ROWS / ROWS_PER_UINT / INIT_THREADS;
 
@@ -2441,10 +2404,6 @@ static inline void solve_new(c_context *miner, unsigned round)
 
 static inline void solve_old(unsigned round, c_context *miner)
 {
-	constexpr uint32_t THREAD_SHIFT = 7;
-	constexpr uint32_t THREAD_COUNT = 1 << THREAD_SHIFT;
-	constexpr uint32_t DIM_SIZE = NR_ROWS >> THREAD_SHIFT;
-
 	constexpr uint32_t INIT_DIM = NR_ROWS / ROWS_PER_UINT / 256;
 	constexpr uint32_t INIT_THREADS = 256;
 	
@@ -2493,7 +2452,6 @@ static inline void solve_old(unsigned round, c_context *miner)
 	}
 }
 
-#include <fstream>
 void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihash_header_len, const char * nonce, unsigned int nonce_len, std::function<bool()> cancelf, std::function<void(const std::vector<uint32_t>&, size_t, const unsigned char*)> solutionf, std::function<void(void)> hashdonef)
 {
 	checkCudaErrors(cudaSetDevice(device_id));

@@ -161,6 +161,7 @@ copy "$(CudaToolkitBinDir)\cudart*.dll" "$(OutDir)"</Command>
       <PtxAsOptionV>true</PtxAsOptionV>
       <FastMath>true</FastMath>
       <Keep>true</Keep>
+      <Optimization>O2</Optimization>
     </CudaCompile>
     <CudaLink>
       <AdditionalOptions>-E %(AdditionalOptions)</AdditionalOptions>
