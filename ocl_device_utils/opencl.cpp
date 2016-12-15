@@ -3,11 +3,15 @@
 #include <vector>
 #include <memory>
 #include <stdio.h>
+#include <algorithm>
+
+#include "ocl_device_utils.h"
 
 extern cl_platform_id gPlatform;
 // extern cl_program gProgram;
 
-std::vector<cl_device_id> GetAllDevices()
+
+/*static std::vector<cl_device_id> GetAllDevices()
 {
 	std::vector<cl_device_id> retval;
 	retval.reserve(8);
@@ -19,9 +23,40 @@ std::vector<cl_device_id> GetAllDevices()
 	for (cl_uint i = 0; i < numPlatforms; i++) {
 		cl_uint numDevices = 0;
 		cl_device_id devices[64];
-		rc = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_ACCELERATOR, sizeof(devices) / sizeof(cl_device_id), devices, &numDevices);
+		rc = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, sizeof(devices) / sizeof(cl_device_id), devices, &numDevices);
 		for (cl_uint n = 0; n < numDevices; n++) {
 			retval.push_back(devices[n]);
+		}
+	}
+
+	return retval;
+}*/
+
+std::vector<cl_device_id> GetAllDevices(int platform_id)
+{
+
+	std::vector<cl_device_id> retval;
+	retval.reserve(8);
+
+	cl_platform_id platforms[64];
+	cl_uint numPlatforms;
+	cl_int rc = clGetPlatformIDs(sizeof(platforms) / sizeof(cl_platform_id), platforms, &numPlatforms);
+
+	for (cl_uint i = 0; i < numPlatforms; i++) {
+		
+		if (platform_id != -1 && i != platform_id) {
+			continue;
+		}
+		cl_uint numDevices = 0;
+		cl_device_id devices[64];
+		rc = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU, sizeof(devices) / sizeof(cl_device_id), devices, &numDevices);
+		for (cl_uint n = 0; n < numDevices; n++) {
+			cl_device_id device = devices[n];
+			if (std::find_if(retval.begin(), retval.end(), [&device](cl_device_id p) {
+				return (p == device);
+			}) == retval.end()) {
+				retval.push_back(device);
+			}
 		}
 	}
 
@@ -30,54 +65,16 @@ std::vector<cl_device_id> GetAllDevices()
 
 bool clInitialize(int requiredPlatform, std::vector<cl_device_id> &gpus)
 {
-  cl_platform_id platforms[64];
-  cl_uint numPlatforms;
-  OCLR(clGetPlatformIDs(sizeof(platforms)/sizeof(cl_platform_id), platforms, &numPlatforms), false);
-  if (!numPlatforms) {
-    printf("<error> no OpenCL platforms found\n");
-    return false;
-  }
-  
-  /*int platformIdx = -1;
-  if (requiredPlatform) {
-    for (decltype(numPlatforms) i = 0; i < numPlatforms; i++) {
-      char name[1024] = {0};
-      OCLR(clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, sizeof(name), name, 0), false);
-      printf("found platform[%i] name = '%s'\n", (int)i, name);
-      if (strcmp(name, requiredPlatform) == 0) {
-        platformIdx = i;
-        break;
-      }
-    }
-  } else {
-    platformIdx = 0;
-  }*/
+	gpus = GetAllDevices();
 
-  int platformIdx = requiredPlatform;
-  
-  
-  if (platformIdx == -1) {
-    printf("<error> platform %s not exists\n", requiredPlatform);
-    return false;
-  }
-  
-  gPlatform = platforms[platformIdx];
-  
-  cl_uint numDevices = 0;
-  cl_device_id devices[64];
-  clGetDeviceIDs(gPlatform, CL_DEVICE_TYPE_GPU, sizeof(devices)/sizeof(cl_device_id), devices, &numDevices);
-  if (numDevices) {
-    printf("<info> found %d devices\n", numDevices);
-  } else {
-    printf("<error> no OpenCL GPU devices found.\n");
-    return false;
-  }
+	if (gpus.empty()) {
+		printf("<error> no OpenCL platforms found\n");
+		return false;
+	}
 
-  for (decltype(numDevices) i = 0; i < numDevices; i++) {
-    gpus.push_back(devices[i]);
-  }
-  
-  return true;
+	printf("<info> found %d devices\n", gpus.size());
+
+	return true;
 }
 
 bool clCompileKernel(cl_context gContext,

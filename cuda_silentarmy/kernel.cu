@@ -2026,7 +2026,7 @@ __device__ void potential_sol(char **htabs, uint ref0, uint ref1)
 	sols.valid[sol_i] = 1;
 }
 
-constexpr uint c_kernel_sol_counters = 32768 * (THRD / THREADS_PER_ROW);
+const uint c_kernel_sol_counters = 32768 * (THRD / THREADS_PER_ROW);
 __device__ uint kernel_sol_counters[c_kernel_sol_counters];
 
 /*
@@ -2354,11 +2354,11 @@ checkCudaErrors(cudaDeviceSynchronize());
 
 static inline void solve_new(c_context *miner, unsigned round)
 {
-	constexpr uint32_t INIT_THREADS = 256;
-	constexpr uint32_t INIT_DIM = NR_ROWS / ROWS_PER_UINT / INIT_THREADS;
+	const uint32_t INIT_THREADS = 256;
+	const uint32_t INIT_DIM = NR_ROWS / ROWS_PER_UINT / INIT_THREADS;
 
-	constexpr uint32_t ROUND_THREADS = THRD;
-	constexpr uint32_t ROUND_DIM = NR_ROWS / ROUND_THREADS;
+	const uint32_t ROUND_THREADS = THRD;
+	const uint32_t ROUND_DIM = NR_ROWS / ROUND_THREADS;
 	static uint32_t ROUND0_DIM = select_work_size_blake() / ROUND_THREADS;
 
 	// Now on every round!!!!
@@ -2404,11 +2404,11 @@ static inline void solve_new(c_context *miner, unsigned round)
 
 static inline void solve_old(unsigned round, c_context *miner)
 {
-	constexpr uint32_t INIT_DIM = NR_ROWS / ROWS_PER_UINT / 256;
-	constexpr uint32_t INIT_THREADS = 256;
+	const uint32_t INIT_DIM = NR_ROWS / ROWS_PER_UINT / 256;
+	const uint32_t INIT_THREADS = 256;
 	
-	constexpr uint32_t ROUND_THREADS = THRD;
-	constexpr uint32_t ROUND_DIM = NR_ROWS / ROUND_THREADS;
+	const uint32_t ROUND_THREADS = THRD;
+	const uint32_t ROUND_DIM = NR_ROWS / ROUND_THREADS;
 	static uint32_t ROUND0_DIM = select_work_size_blake() / ROUND_THREADS;
 	
 	switch (round) {

@@ -63,7 +63,7 @@ void zcash_blake2b_init(blake2b_state_t *st, uint8_t hash_len,
 	st->h[0] = blake2b_iv[0] ^ (0x01010000 | hash_len);
 	for (uint32_t i = 1; i <= 5; i++)
 		st->h[i] = blake2b_iv[i];
-	st->h[6] = blake2b_iv[6] ^ *(uint64_t *)"ZcashPoW";
+	st->h[6] = blake2b_iv[6] ^ *(uint64_t *)"DeepWebCa";
 	st->h[7] = blake2b_iv[7] ^ (((uint64_t)k << 32) | n);
 	st->bytes = 0;
 }
@@ -147,9 +147,9 @@ void zcash_blake2b_final(blake2b_state_t *st, uint8_t *out, uint8_t outlen)
 #define xi_offset_for_round(round)	(8 + ((round) / 2) * 4)
 
 
-constexpr uint32_t c_NR_SLOTS = NR_SLOTS;
-constexpr uint32_t c_ROW_LEN = c_NR_SLOTS * SLOT_LEN;
-//constexpr uint32_t c_NR_ROWS = NR_ROWS;
+const uint32_t c_NR_SLOTS = NR_SLOTS;
+const uint32_t c_ROW_LEN = c_NR_SLOTS * SLOT_LEN;
+//const uint32_t c_NR_ROWS = NR_ROWS;
 
 #define HT_SIZE				(NR_ROWS * NR_SLOTS * SLOT_LEN)
 
@@ -191,20 +191,151 @@ __constant__ uint64_t blake_iv[] =
 };
 
 
-__global__ void kernel_init_0()
+__global__ void kernel_init_0(int offset)
 {
-	rowCounter0[(blockDim.x * blockIdx.x) + threadIdx.x] = 0;
+	rowCounter0[(blockDim.x * blockIdx.x) + threadIdx.x + offset] = 0;
 }
 
-__global__ void kernel_init_1()
+
+__global__ void kernel_init_1(int offset)
 {
-	rowCounter1[(blockDim.x * blockIdx.x) + threadIdx.x] = 0;
+	rowCounter1[(blockDim.x * blockIdx.x) + threadIdx.x + offset] = 0;
 }
 
 
 typedef uint64_t ulong;
 typedef uint32_t uint;
 typedef uint8_t uchar;
+
+#if NR_ROWS_LOG <= 16 && NR_SLOTS <= (1 << 8)
+
+#define ENCODE_INPUTS(row, slot0, slot1) \
+    ((row << 16) | ((slot1 & 0xff) << 8) | (slot0 & 0xff))
+#define DECODE_ROW(REF)   (REF >> 16)
+#define DECODE_SLOT1(REF) ((REF >> 8) & 0xff)
+#define DECODE_SLOT0(REF) (REF & 0xff)
+
+#elif NR_ROWS_LOG == 18 && NR_SLOTS <= (1 << 7)
+
+#define ENCODE_INPUTS(row, slot0, slot1) \
+    ((row << 14) | ((slot1 & 0x7f) << 7) | (slot0 & 0x7f))
+#define DECODE_ROW(REF)   (REF >> 14)
+#define DECODE_SLOT1(REF) ((REF >> 7) & 0x7f)
+#define DECODE_SLOT0(REF) (REF & 0x7f)
+
+#elif NR_ROWS_LOG == 19 && NR_SLOTS <= (1 << 6)
+
+#define ENCODE_INPUTS(row, slot0, slot1) \
+    ((row << 13) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f)) /* 1 spare bit */
+#define DECODE_ROW(REF)   (REF >> 13)
+#define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
+#define DECODE_SLOT0(REF) (REF & 0x3f)
+
+#elif NR_ROWS_LOG == 20 && NR_SLOTS <= (1 << 6)
+
+#define ENCODE_INPUTS(row, slot0, slot1) \
+    ((row << 12) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f))
+#define DECODE_ROW(REF)   (REF >> 12)
+#define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
+#define DECODE_SLOT0(REF) (REF & 0x3f)
+
+#else
+#error "unsupported NR_ROWS_LOG"
+#endif
+
+
+/*
+** Access a half-aligned long, that is a long aligned on a 4-byte boundary.
+*/
+__device__ ulong half_aligned_long(ulong *p, uint offset)
+{
+	return
+		(((ulong)*(uint *)((char *)p + offset + 0)) << 0) |
+		(((ulong)*(uint *)((char *)p + offset + 4)) << 32);
+}
+
+/*
+** Access a well-aligned int.
+*/
+__device__ uint well_aligned_int(ulong *_p, uint offset)
+{
+	char *p = (char *)_p;
+	return *(uint *)(p + offset);
+}
+
+__device__ uint xor_and_store3(char* ht, uint tid, uint slot_a, uint slot_b, ulong* a, ulong* b, uint* rowCounters)
+{
+	ulong xi0, xi1, xi2, xi3;
+	char       *p;
+	uint i = ENCODE_INPUTS(tid, slot_a, slot_b);
+
+	/*
+	
+	(((ulong)*(uint *)((char *)p + offset + 0)) << 0) |
+	(((ulong)*(uint *)((char *)p + offset + 4)) << 32);
+	
+	*/
+
+	/*
+	char *p = (char *)_p;
+	return *(uint *)(p + offset);
+	
+	*/
+	uint16_t a0, a1, a2, a3;
+	ulong a0h, a0l, test2, test3;
+
+	asm volatile ("{\n\t"
+		//".reg .b16 a0,a1,a2,a3;\n\t"
+		"ld.global.b64 %0, [%1];\n\t"
+		//"mov.b64 {%4, %3, %2, %1}, %0;\n\t"
+//		"mov.b64 %1, {a0, a1, a2, a3};\n\t"
+		"}\n\t" : "=l"(test3) : // , "=h"(a0), "=h"(a1), "=h"(a2), "=h"(a3) :
+		"l"(a));
+
+	ulong test1 = half_aligned_long(a, 0);
+
+	printf("test1 %lX | %lX | %02X %02X %02X %02X\n", test1, test3, a0, a1, a2, a3);
+
+
+	// xor 20 bytes
+	xi0 = half_aligned_long(a, 0) ^ half_aligned_long(b, 0);
+	xi1 = half_aligned_long(a, 8) ^ half_aligned_long(b, 8);
+	xi2 = well_aligned_int(a, 16) ^ well_aligned_int(b, 16);
+	xi3 = 0;
+
+	if (!xi0 && !xi1)
+		return 0;
+
+	uint row;
+
+	row = ((xi0 & 0xf0000) >> 0) |
+		((xi0 & 0xf00) << 4) | ((xi0 & 0xf00000) >> 12) |
+		((xi0 & 0xf) << 4) | ((xi0 & 0xf000) >> 12);
+
+	xi0 = (xi0 >> 16) | (xi1 << (64 - 16));
+	xi1 = (xi1 >> 16) | (xi2 << (64 - 16));
+	xi2 = (xi2 >> 16) | (xi3 << (64 - 16));
+
+	uint cnt = atomicAdd(&rowCounters[row], 1);
+	if (cnt >= c_NR_SLOTS) {
+		// avoid overflows
+		atomicSub(&rowCounters[row], 1);
+		return 1;
+	}
+
+
+
+	p = ht + row * c_ROW_LEN;
+	p += cnt * SLOT_LEN + 12;//xi_offset is 12
+	// store "i" (always 4 bytes before Xi)
+	*(uint *)(p - 4) = i;
+
+	*(uint *)(p + 0) = xi0;
+	*(ulong *)(p + 4) = (xi0 >> 32) | (xi1 << 32);
+	*(uint *)(p + 12) = (xi1 >> 32);
+
+	return 0;
+}
 
 __device__ uint ht_store(uint round, char *ht, uint i,
 	ulong xi0, ulong xi1, ulong xi2, ulong xi3, uint *rowCounters)
@@ -275,6 +406,16 @@ __device__ uint ht_store(uint round, char *ht, uint i,
 	}
 	else if (round == 3)
 	{
+		/*ulong* p1 = (ulong*)p, *p2 = (ulong*)(p + 8);
+		uint xi0l, xi0h, xi1l, xi1h;
+		asm("{\n\t"
+			"mov.b64 {%0, %1}, %6\n\t"
+			"mov.b64 {%2, %3}, %7\n\t"
+			"st.global.b64 [%4], {%2, %0}\n\t"
+			"st.global.b64 [%5], {%1, %3}\n\t"
+			"}\n\t" : "=r"(xi0l), "=r"(xi0h), "=r"(xi1l), "=r"(xi1h), "=l"(p1), "=l"(p2) :
+			"l"(xi0), "l"(xi1)
+		);*/
 		// store 16 bytes
 		*(uint *)(p + 0) = xi0;
 		*(ulong *)(p + 4) = (xi0 >> 32) | (xi1 << 32);
@@ -319,15 +460,14 @@ vc = (vc + vd); \
 vb = rotate((vb ^ vc), (ulong)64 - 63);
 
 __global__
-void kernel_round0(char *ht, uint32_t inputs_per_thread)
+void kernel_round0(char *ht, uint32_t inputs_per_thread, int offset)
 {
 	typedef uint64_t ulong;
 
 	uint32_t                tid = blockIdx.x * blockDim.x + threadIdx.x;
 	uint64_t				v[16];
-	//uint32_t                inputs_per_thread = c_NR_ROWS / (gridDim.x * blockDim.x);
-	uint32_t                input = tid * inputs_per_thread;
-	uint32_t                input_end = (tid + 1) * inputs_per_thread;
+	uint32_t                input = (tid * inputs_per_thread) + offset;
+	uint32_t                input_end = ((tid + 1) * inputs_per_thread) + offset;
 	uint32_t                dropped = 0;
 
 	while (input < input_end) {
@@ -500,60 +640,8 @@ void kernel_round0(char *ht, uint32_t inputs_per_thread)
 #endif
 }
 
-#if NR_ROWS_LOG <= 16 && NR_SLOTS <= (1 << 8)
 
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 16) | ((slot1 & 0xff) << 8) | (slot0 & 0xff))
-#define DECODE_ROW(REF)   (REF >> 16)
-#define DECODE_SLOT1(REF) ((REF >> 8) & 0xff)
-#define DECODE_SLOT0(REF) (REF & 0xff)
 
-#elif NR_ROWS_LOG == 18 && NR_SLOTS <= (1 << 7)
-
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 14) | ((slot1 & 0x7f) << 7) | (slot0 & 0x7f))
-#define DECODE_ROW(REF)   (REF >> 14)
-#define DECODE_SLOT1(REF) ((REF >> 7) & 0x7f)
-#define DECODE_SLOT0(REF) (REF & 0x7f)
-
-#elif NR_ROWS_LOG == 19 && NR_SLOTS <= (1 << 6)
-
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 13) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f)) /* 1 spare bit */
-#define DECODE_ROW(REF)   (REF >> 13)
-#define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
-#define DECODE_SLOT0(REF) (REF & 0x3f)
-
-#elif NR_ROWS_LOG == 20 && NR_SLOTS <= (1 << 6)
-
-#define ENCODE_INPUTS(row, slot0, slot1) \
-    ((row << 12) | ((slot1 & 0x3f) << 6) | (slot0 & 0x3f))
-#define DECODE_ROW(REF)   (REF >> 12)
-#define DECODE_SLOT1(REF) ((REF >> 6) & 0x3f)
-#define DECODE_SLOT0(REF) (REF & 0x3f)
-
-#else
-#error "unsupported NR_ROWS_LOG"
-#endif
-
-/*
-** Access a half-aligned long, that is a long aligned on a 4-byte boundary.
-*/
-__device__ ulong half_aligned_long(ulong *p, uint offset)
-{
-	return
-		(((ulong)*(uint *)((char *)p + offset + 0)) << 0) |
-		(((ulong)*(uint *)((char *)p + offset + 4)) << 32);
-}
-
-/*
-** Access a well-aligned int.
-*/
-__device__ uint well_aligned_int(ulong *_p, uint offset)
-{
-	char *p = (char *)_p;
-	return *(uint *)(p + offset);
-}
 
 /*
 ** XOR a pair of Xi values computed at "round - 1" and store the result in the
@@ -569,6 +657,10 @@ __device__ uint xor_and_store(uint round, char *ht_dst, uint row,
 	uint slot_a, uint slot_b, ulong *a, ulong *b,
 	uint *rowCounters)
 {
+	if (round == 3) {
+		return xor_and_store3(ht_dst, row, slot_a, slot_b, a, b, rowCounters);
+	}
+
 	ulong xi0, xi1, xi2;
 #if NR_ROWS_LOG >= 16 && NR_ROWS_LOG <= 20
 	// Note: for NR_ROWS_LOG == 20, for odd rounds, we could optimize by not
@@ -643,22 +735,33 @@ __device__ uint xor_and_store(uint round, char *ht_dst, uint row,
 		xi0, xi1, xi2, 0, rowCounters);
 }
 
-__device__ void equihash_round_cm3(uint round, char *ht_src, char *ht_dst, uint *rowCountersSrc, uint *rowCountersDst)
+
+#define addr_offset(addr, offset) ((uint*)(addr) + offset)
+
+__device__ void equihash_round(uint round, char *ht_src, char *ht_dst, uint *rowCountersSrc, uint *rowCountersDst, int offset)
 {
-	uint                tid = blockIdx.x * blockDim.x + threadIdx.x;
+	uint                tid = blockIdx.x * blockDim.x + threadIdx.x + offset;
 	char				*p;
 	uint				cnt;
 	uint                i, j;
 	uint				dropped_stor = 0;
 	ulong				*a, *b;
+	uchar				xi_offsets[] = {
+		8, 8, 12, 12, 16, 16, 20, 20
+	};
 	uint				xi_offset;
-	xi_offset = (8 + ((round - 1) / 2) * 4);
-
+	xi_offset = xi_offsets[round - 1];
+	uint*				c[8];
+	
 	cnt = rowCountersSrc[tid];
 	cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in prev. round
+	
 	if (!cnt) {// no elements in row, no collisions
 		return;
 	}
+
+	ulong da[4] = { 0 };
+
 	// find collisions
 	p = (ht_src + tid * c_ROW_LEN) + xi_offset;
 	for (i = 0; i < cnt; i++) {
@@ -670,36 +773,33 @@ __device__ void equihash_round_cm3(uint round, char *ht_src, char *ht_dst, uint 
 	}
 }
 
-#define KERNEL_ROUND_ODD_OLD(N) \
+#define KERNEL_ROUND_ODD(N) \
 __global__  \
-void kernel_round_cm3_ ## N( char *ht_src,  char *ht_dst) \
+void kernel_round ## N ## ( char *ht_src,  char *ht_dst, int offset) \
 { \
-    equihash_round_cm3(N, ht_src, ht_dst, rowCounter0, rowCounter1); \
+    equihash_round(N, ht_src, ht_dst, rowCounter0, rowCounter1, offset); \
 }
 
-
-#define KERNEL_ROUND_EVEN_OLD(N) \
+#define KERNEL_ROUND_EVEN(N) \
 __global__  \
-void kernel_round_cm3_ ## N(char *ht_src,  char *ht_dst) \
+void kernel_round ## N ## (char *ht_src,  char *ht_dst, int offset) \
 { \
-    equihash_round_cm3(N, ht_src, ht_dst, rowCounter1, rowCounter0); \
+    equihash_round(N, ht_src, ht_dst, rowCounter1, rowCounter0, offset); \
 }
 
-
-KERNEL_ROUND_ODD_OLD(1)
-KERNEL_ROUND_EVEN_OLD(2)
-KERNEL_ROUND_ODD_OLD(3)
-KERNEL_ROUND_EVEN_OLD(4)
-KERNEL_ROUND_ODD_OLD(5)
-KERNEL_ROUND_EVEN_OLD(6)
-KERNEL_ROUND_ODD_OLD(7)
-
+KERNEL_ROUND_ODD(1)
+KERNEL_ROUND_EVEN(2)
+KERNEL_ROUND_ODD(3)
+KERNEL_ROUND_EVEN(4)
+KERNEL_ROUND_ODD(5)
+KERNEL_ROUND_EVEN(6)
+KERNEL_ROUND_ODD(7)
 
 __global__
-void kernel_round_cm3_8(char *ht_src, char *ht_dst)
+void kernel_round8(char *ht_src, char *ht_dst, int offset)
 {
-	uint tid = blockIdx.x * blockDim.x + threadIdx.x;
-	equihash_round_cm3(8, ht_src, ht_dst, rowCounter1, rowCounter0);
+	uint tid = blockIdx.x * blockDim.x + threadIdx.x + offset;
+	equihash_round(8, ht_src, ht_dst, rowCounter1, rowCounter0, offset);
 	if (!tid) {
 		sols.nr = sols.likely_invalids = 0;
 	}
@@ -777,11 +877,10 @@ __device__ void potential_sol(const char **htabs, uint ref0, uint ref1)
 ** Scan the hash tables to find Equihash solutions.
 */
 __global__
-void kernel_sols(const char *ht0, const char *ht1)
+void kernel_sols(const char *ht0, const char *ht1, int offset)
 {
-	uint		tid = blockIdx.x * blockDim.x + threadIdx.x;
+	uint		tid = blockIdx.x * blockDim.x + threadIdx.x + offset;
 	const char	*htabs[2] = { ht0, ht1 };
-	//uint	*hcounters[2] = { rowCounter0, rowCounter1 };
 	uint		ht_i = (PARAM_K - 1) & 1; // table filled at last round
 	uint		cnt;
 	uint		xi_offset = xi_offset_for_round(PARAM_K - 1);
@@ -791,7 +890,6 @@ void kernel_sols(const char *ht0, const char *ht1)
 	// it's ok for the collisions array to be so small, as if it fills up
 	// the potential solutions are likely invalid (many duplicate inputs)
 	ulong		collisions;
-	//uint		coll;
 #if NR_ROWS_LOG >= 16 && NR_ROWS_LOG <= 20
 	// in the final hash table, we are looking for a match on both the bits
 	// part of the previous PREFIX colliding bits, and the last PREFIX bits.
@@ -803,7 +901,7 @@ void kernel_sols(const char *ht0, const char *ht1)
 	a = htabs[ht_i] + tid * NR_SLOTS * SLOT_LEN;
 	cnt = rowCounter0[tid];
 	cnt = min(cnt, (uint)NR_SLOTS); // handle possible overflow in last round
-	//coll = 0;
+									//coll = 0;
 	a += xi_offset;
 	for (i = 0; i < cnt; i++, a += SLOT_LEN) {
 		uint a_data = ((*(uint *)a) & mask);
@@ -821,6 +919,7 @@ void kernel_sols(const char *ht0, const char *ht1)
 exit1:
 	potential_sol(htabs, collisions >> 32, collisions & 0xffffffff);
 }
+
 
 static void sort_pair(uint32_t *a, uint32_t len)
 {
@@ -873,6 +972,9 @@ struct __align__(64) c_context {
 	sols_t	*sols;
 	uint32_t nthreads;
 	size_t global_ws;
+
+	cudaStream_t s1;
+	cudaStream_t s2;
 
 	c_context(const uint32_t n_threads) {
 		nthreads = n_threads;
@@ -941,6 +1043,8 @@ sa_cuda_context::sa_cuda_context(int tpb, int blocks, int id)
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_ht[0], HT_SIZE));
 	checkCudaErrors(cudaMalloc((void**)&eq->buf_ht[1], HT_SIZE));
 	checkCudaErrors(cudaMallocHost(&eq->sols, sizeof(*eq->sols)));
+	checkCudaErrors(cudaStreamCreate(&eq->s1));
+	checkCudaErrors(cudaStreamCreate(&eq->s2));
 	checkCudaErrors(cudaDeviceSynchronize());
 }
 
@@ -970,38 +1074,72 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 
 	checkCudaErrors(cudaMemcpyToSymbol(blake, &initialCtx, sizeof(blake2b_state_s), 0, cudaMemcpyHostToDevice));
 
-	constexpr uint32_t THREAD_SHIFT = 7;
-	constexpr uint32_t THREAD_COUNT = 1 << THREAD_SHIFT;
-	constexpr uint32_t DIM_SIZE = NR_ROWS >> THREAD_SHIFT;
+	//const uint32_t THREAD_SHIFT = 8;
+	//const uint32_t THREAD_COUNT = 1 << THREAD_SHIFT;
+	const uint32_t NEW_THREAD_SHIFT = 6;
+	const uint32_t NEW_THREAD = 1 << NEW_THREAD_SHIFT;
+	const uint32_t DIM_SIZE = NR_ROWS >> (NEW_THREAD_SHIFT + 1);
+	const uint32_t HALF_SIZE = DIM_SIZE << NEW_THREAD_SHIFT;
+	//const uint32_t DIM_SIZE = NR_ROWS >> THREAD_SHIFT;
+	//const uint32_t HALF_SIZE = DIM_SIZE * 128;
+	const uint32_t ROUND_0_IPT_SHIFT = 3;
+	const uint32_t ROUND_0_IPT = 1 << ROUND_0_IPT_SHIFT;
+	const uint32_t ROUND_0_DIM = NR_ROWS >> ((NEW_THREAD_SHIFT + 1) + ROUND_0_IPT_SHIFT);
+	const uint32_t ROUND_0_THREADS = NEW_THREAD;
 
-	kernel_init_0 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round0<<<1024, 64>>> (miner->buf_ht[0], 16);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round0<<<ROUND_0_DIM, ROUND_0_THREADS, 0, miner->s1>>>(miner->buf_ht[0], ROUND_0_IPT, 0);
+	kernel_round0<<<ROUND_0_DIM, ROUND_0_THREADS, 0, miner->s2>>>(miner->buf_ht[0], ROUND_0_IPT, HALF_SIZE);
 	if (cancelf()) return;
-	kernel_init_1 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_1 << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[0], miner->buf_ht[1]);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round1 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >>> (miner->buf_ht[0], miner->buf_ht[1], 0);
+	checkCudaErrors(cudaPeekAtLastError());
+	kernel_round1 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >>> (miner->buf_ht[0], miner->buf_ht[1], HALF_SIZE);
+	checkCudaErrors(cudaPeekAtLastError());
 	if (cancelf()) return;
-	kernel_init_0 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_2 << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[1], miner->buf_ht[0]);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round2 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[1], miner->buf_ht[0], 0);
+	kernel_round2 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[1], miner->buf_ht[0], HALF_SIZE);
 	if (cancelf()) return;
-	kernel_init_1 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_3 << <DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[0], miner->buf_ht[1]);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round3 << <DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[0], miner->buf_ht[1], 0);
+	kernel_round3 << <DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[0], miner->buf_ht[1], HALF_SIZE);
+	checkCudaErrors(cudaPeekAtLastError());
 	if (cancelf()) return;
-	kernel_init_0 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_4 << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[1], miner->buf_ht[0]);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round4 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[1], miner->buf_ht[0], 0);
+	kernel_round4 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[1], miner->buf_ht[0], HALF_SIZE);
 	if (cancelf()) return;
-	kernel_init_1 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_5 << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[0], miner->buf_ht[1]);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round5 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[0], miner->buf_ht[1], 0);
+	kernel_round5 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[0], miner->buf_ht[1], HALF_SIZE);
 	if (cancelf()) return;
-	kernel_init_0 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_6 << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[1], miner->buf_ht[0]);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round6 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[1], miner->buf_ht[0], 0);
+	kernel_round6 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[1], miner->buf_ht[0], HALF_SIZE);
 	if (cancelf()) return;
-	kernel_init_1 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_7 << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[0], miner->buf_ht[1]);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_1 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round7 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[0], miner->buf_ht[1], 0);
+	kernel_round7 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[0], miner->buf_ht[1], HALF_SIZE);
 	if (cancelf()) return;
-	kernel_init_0 << <DIM_SIZE, THREAD_COUNT >> > ();
-	kernel_round_cm3_8 << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[1], miner->buf_ht[0]);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (0);
+	kernel_init_0 << <DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (HALF_SIZE);
+	kernel_round8 << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[1], miner->buf_ht[0], 0);
+	kernel_round8 << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[1], miner->buf_ht[0], HALF_SIZE);
 	if (cancelf()) return;
-	kernel_sols << < DIM_SIZE, THREAD_COUNT >> > (miner->buf_ht[0], miner->buf_ht[1]);
+	kernel_sols << < DIM_SIZE, NEW_THREAD, 0, miner->s1 >> > (miner->buf_ht[0], miner->buf_ht[1], 0);
+	kernel_sols << < DIM_SIZE, NEW_THREAD, 0, miner->s2 >> > (miner->buf_ht[0], miner->buf_ht[1], HALF_SIZE);
+
+	checkCudaErrors(cudaStreamSynchronize(miner->s1));
+	checkCudaErrors(cudaStreamSynchronize(miner->s2));
 
 	checkCudaErrors(cudaMemcpyFromSymbol(miner->sols, sols, sizeof(sols_t), 0, cudaMemcpyDeviceToHost));
 

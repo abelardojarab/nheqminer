@@ -7,7 +7,7 @@
 #define APX_NR_ELMS_LOG                 (PREFIX + 1)
 // Number of rows and slots is affected by this. 20 offers the best performance
 // but occasionally misses ~1% of solutions.
-#define NR_ROWS_LOG                     18
+#define NR_ROWS_LOG                     20
 
 // Setting this to 1 might make SILENTARMY faster, see TROUBLESHOOTING.md
 #define OPTIM_SIMPLIFY_ROUND		1
@@ -15,10 +15,10 @@
 // Number of collision items to track, per thread
 #ifdef cl_nv_pragma_unroll // NVIDIA
 #define THREADS_PER_ROW 16
-#define LDS_COLL_SIZE (NR_SLOTS * 24 * (64 / THREADS_PER_ROW))
+#define LDS_COLL_SIZE (NR_SLOTS * 24 * (THRD / THREADS_PER_ROW))
 #else
 #define THREADS_PER_ROW 8
-#define LDS_COLL_SIZE (NR_SLOTS * 8 * (64 / THREADS_PER_ROW))
+#define LDS_COLL_SIZE (NR_SLOTS * 8 * (THRD / THREADS_PER_ROW))
 #endif
 
 // Ratio of time of sleeping before rechecking if task is done (0-1)

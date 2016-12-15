@@ -115,7 +115,7 @@ public:
 };
 
 
-std::vector<cl_device_id> GetAllDevices();
+std::vector<cl_device_id> GetAllDevices(int platform_id = -1);
 
 bool clInitialize(int requiredPlatform, std::vector<cl_device_id> &gpus);
 bool clCompileKernel(cl_context gContext,

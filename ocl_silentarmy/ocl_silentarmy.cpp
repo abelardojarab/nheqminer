@@ -367,7 +367,7 @@ ocl_silentarmy::ocl_silentarmy(int platf_id, int dev_id) {
 }
 
 std::string ocl_silentarmy::getdevinfo() {
-	static auto devices = GetAllDevices();
+	static auto devices = GetAllDevices(platform_id);
 	auto device = devices[device_id];
 	std::vector<char> name(256, 0);
 	size_t nActualSize = 0;
@@ -387,7 +387,7 @@ int ocl_silentarmy::getcount() {
 }
 
 void ocl_silentarmy::getinfo(int platf_id, int d_id, std::string& gpu_name, int& sm_count, std::string& version) { 
-	static auto devices = GetAllDevices();
+	static auto devices = GetAllDevices(platf_id);
 
 	if (devices.size() <= d_id) {
 		return;
@@ -420,20 +420,23 @@ void ocl_silentarmy::start(ocl_silentarmy& device_context) {
 	/*TODO*/
 	device_context.is_init_success = false;
 	device_context.oclc = new OclContext;
-	auto devices = GetAllDevices();
+	auto devices = GetAllDevices(device_context.platform_id);
+
+	printf("pid %i, size %u\n", device_context.platform_id, devices.size());
 	auto device = devices[device_context.device_id];
 
 	size_t nActualSize = 0;
 	cl_platform_id platform_id = nullptr;
-	cl_int rc = clGetDeviceInfo(device, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &platform_id, &nActualSize);
+	cl_int rc = clGetDeviceInfo(device, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &platform_id, nullptr);
 	
+
 	device_context.oclc->_dev_id = device;
 	device_context.oclc->platform_id = platform_id;
 
 	// context create
 	cl_context_properties props[] = { CL_CONTEXT_PLATFORM, (cl_context_properties)device_context.oclc->platform_id, 0 };
 	cl_int error;
-	device_context.oclc->_context = clCreateContext(NULL, 1, &device, 0, 0, &error);
+	device_context.oclc->_context = clCreateContext(props, 1, &device, 0, 0, &error);
 	//OCLR(error, false);
 	if (cl_int err = error) {
 		printf("OpenCL error: %d at %s:%d\n", err, __FILE__, __LINE__);
