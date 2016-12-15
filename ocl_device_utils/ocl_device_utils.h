@@ -8,7 +8,6 @@
 #include <vector>
 #include "OpenCLDevice.h"
 
-
 struct PrintInfo {
 	std::string PlatformName;
 	int PlatformNum;
