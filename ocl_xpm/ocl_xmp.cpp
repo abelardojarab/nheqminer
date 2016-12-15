@@ -105,7 +105,7 @@ static void setheader(blake2b_state *ctx, const char *header, const uint32_t hea
 {
 	uint32_t le_N = WN;
 	uint32_t le_K = WK;
-	char personal[] = "ZcashPoW01230123";
+	char personal[] = "DeepWebCa01230123";
 	memcpy(personal + 8, &le_N, 4);
 	memcpy(personal + 12, &le_K, 4);
 	blake2b_param P[1];

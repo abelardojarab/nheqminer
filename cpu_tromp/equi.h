@@ -49,7 +49,7 @@ typedef u32 proof[PROOFSIZE];
 void setheader(blake2b_state *ctx, const char *header, const u32 headerLen, const char* nce, const u32 nonceLen) {
   uint32_t le_N = WN;
   uint32_t le_K = WK;
-  uchar personal[] = "ZcashPoW01230123";
+  uchar personal[] = "DeepWebCa01230123";
   memcpy(personal+8,  &le_N, 4);
   memcpy(personal+12, &le_K, 4);
   blake2b_param P[1];
@@ -73,7 +73,7 @@ enum verify_code { POW_OK, POW_DUPLICATE, POW_OUT_OF_ORDER, POW_NONZERO_XOR };
 const char *errstr[] = { "OK", "duplicate index", "indices out of order", "nonzero xor" };
 
 void genhash(blake2b_state *ctx, u32 idx, uchar *hash) {
-	constexpr int hash_size = WN / 8;
+  const int hash_size = WN / 8;
   blake2b_state state = *ctx;
   u32 leb = (idx / HASHESPERBLAKE);
   blake2b_update(&state, (uchar *)&leb, sizeof(u32));
@@ -83,7 +83,7 @@ void genhash(blake2b_state *ctx, u32 idx, uchar *hash) {
 }
 
 int verifyrec(blake2b_state *ctx, u32 *indices, uchar *hash, int r) {
-  constexpr int hash_size = WN / 8;
+  const int hash_size = WN / 8;
   if (r == 0) {
     genhash(ctx, *indices, hash);
     return POW_OK;

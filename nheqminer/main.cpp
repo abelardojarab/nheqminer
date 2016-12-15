@@ -265,7 +265,7 @@ int main(int argc, char* argv[])
 	int cuda_device_count = 0;
 	int cuda_bc = 0;
 	int cuda_tbpc = 0;
-	int opencl_platform = 0;
+	int opencl_platform = -1;
 	int opencl_device_count = 0;
 	int force_cpu_ext = -1;
 	int opencl_t = 0;
@@ -361,6 +361,9 @@ int main(int argc, char* argv[])
 						break;
 					}
 				}
+				break;
+			case 'p':
+				opencl_platform = atoi(argv[++i]);
 				break;
 			case 't':
 				while (opencl_t < 8 && i + 1 < argc)

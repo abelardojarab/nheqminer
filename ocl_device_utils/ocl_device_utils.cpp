@@ -1,5 +1,5 @@
 #include "ocl_device_utils.h"
-
+#include "opencl.h"
 #include <iostream>
 #include <stdexcept>
 #include <utility>
@@ -14,26 +14,6 @@ std::vector<std::string> ocl_device_utils::_platformNames;
 std::vector<PrintInfo> ocl_device_utils::_devicesPlatformsDevices;
 std::vector<cl::Device> ocl_device_utils::_AllDevices;
 
-static std::vector<cl_device_id> GetAllDevices()
-{
-	std::vector<cl_device_id> retval;
-	retval.reserve(8);
-
-	cl_platform_id platforms[64];
-	cl_uint numPlatforms;
-	cl_int rc = clGetPlatformIDs(sizeof(platforms) / sizeof(cl_platform_id), platforms, &numPlatforms);
-
-	for (cl_uint i = 0; i < numPlatforms; i++) {
-		cl_uint numDevices = 0;
-		cl_device_id devices[64];
-		rc = clGetDeviceIDs(platforms[i], CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_ACCELERATOR, sizeof(devices) / sizeof(cl_device_id), devices, &numDevices);
-		for (cl_uint n = 0; n < numDevices; n++) {
-			retval.push_back(devices[n]);
-		}
-	}
-
-	return retval;
-}
 
 vector<Platform> ocl_device_utils::getPlatforms() {
 	vector<Platform> platforms;
@@ -59,7 +39,10 @@ void ocl_device_utils::print_opencl_devices() {
 vector<Device> ocl_device_utils::getDevices(vector<Platform> const& _platforms, unsigned _platformId) {
 	vector<Device> devices;
 	try {
-		_platforms[_platformId].getDevices(/*CL_DEVICE_TYPE_CPU| */CL_DEVICE_TYPE_GPU | CL_DEVICE_TYPE_ACCELERATOR, &devices);
+		auto cl_devices = GetAllDevices();
+		for (auto& cl_device : cl_devices) {
+			devices.push_back({ cl_device });
+		}
 	}
 	catch (Error const& err) {
 		// if simply no devices found return empty vector
@@ -79,60 +62,39 @@ bool ocl_device_utils::QueryDevices() {
 		try {
 			auto devices = GetAllDevices();
 
-			for (auto& device : devices) {
-				_AllDevices.emplace_back(cl::Device(device));
-			}
+			unsigned int device_num = 0;
+			for (auto& cldevice : devices) {
+				cl::Device device(cldevice);
+				cl::Platform platform(device.getInfo<CL_DEVICE_PLATFORM>());
+				_AllDevices.emplace_back(device);
+				PrintInfo current;
+				current.PlatformName = StringnNullTerminatorFix(platform.getInfo<CL_PLATFORM_NAME>());
+				current.PlatformNum = 0;
+				OpenCLDevice curDevice;
+				curDevice.DeviceID = device_num++;
+				curDevice._CL_DEVICE_NAME = StringnNullTerminatorFix(device.getInfo<CL_DEVICE_NAME>());
 
-			
-
-
-			// get platforms
-			auto platforms = getPlatforms();
-			if (platforms.empty()) {
-				cout << "No OpenCL platforms found" << endl;
-				return false;
-			}
-			else {
-				for (auto i_pId = 0u; i_pId < platforms.size(); ++i_pId) {
-					string platformName = StringnNullTerminatorFix(platforms[i_pId].getInfo<CL_PLATFORM_NAME>());
-					if (std::find(_platformNames.begin(), _platformNames.end(), platformName) == _platformNames.end()) {
-						PrintInfo current;
-						_platformNames.push_back(platformName);
-						// new
-						current.PlatformName = platformName;
-						current.PlatformNum = i_pId;
-
-						auto clDevs = getDevices(platforms, i_pId);
-						for (auto i_devId = 0u; i_devId < clDevs.size(); ++i_devId) {
-							OpenCLDevice curDevice;
-							curDevice.DeviceID = i_devId;
-							curDevice._CL_DEVICE_NAME = StringnNullTerminatorFix(clDevs[i_devId].getInfo<CL_DEVICE_NAME>());
-							switch (clDevs[i_devId].getInfo<CL_DEVICE_TYPE>()) {
-							case CL_DEVICE_TYPE_CPU:
-								curDevice._CL_DEVICE_TYPE = "CPU";
-								break;
-							case CL_DEVICE_TYPE_GPU:
-								curDevice._CL_DEVICE_TYPE = "GPU";
-								break;
-							case CL_DEVICE_TYPE_ACCELERATOR:
-								curDevice._CL_DEVICE_TYPE = "ACCELERATOR";
-								break;
-							default:
-								curDevice._CL_DEVICE_TYPE = "DEFAULT";
-								break;
-							}
-
-
-							curDevice._CL_DEVICE_GLOBAL_MEM_SIZE = clDevs[i_devId].getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
-							curDevice._CL_DEVICE_VENDOR = StringnNullTerminatorFix(clDevs[i_devId].getInfo<CL_DEVICE_VENDOR>());
-							curDevice._CL_DEVICE_VERSION = StringnNullTerminatorFix(clDevs[i_devId].getInfo<CL_DEVICE_VERSION>());
-							curDevice._CL_DRIVER_VERSION = StringnNullTerminatorFix(clDevs[i_devId].getInfo<CL_DRIVER_VERSION>());
-
-							current.Devices.push_back(curDevice);
-						}
-						_devicesPlatformsDevices.push_back(current);
-					}
+				switch (device.getInfo<CL_DEVICE_TYPE>()) {
+					case CL_DEVICE_TYPE_CPU:
+						curDevice._CL_DEVICE_TYPE = "CPU";
+						break;
+					case CL_DEVICE_TYPE_GPU:
+						curDevice._CL_DEVICE_TYPE = "GPU";
+						break;
+					case CL_DEVICE_TYPE_ACCELERATOR:
+						curDevice._CL_DEVICE_TYPE = "ACCELERATOR";
+						break;
+					default:
+						curDevice._CL_DEVICE_TYPE = "DEFAULT";
+						break;
 				}
+
+				curDevice._CL_DEVICE_GLOBAL_MEM_SIZE = device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>();
+				curDevice._CL_DEVICE_VENDOR = StringnNullTerminatorFix(device.getInfo<CL_DEVICE_VENDOR>());
+				curDevice._CL_DEVICE_VERSION = StringnNullTerminatorFix(device.getInfo<CL_DEVICE_VERSION>());
+				curDevice._CL_DRIVER_VERSION = StringnNullTerminatorFix(device.getInfo<CL_DRIVER_VERSION>());
+				current.Devices.push_back(curDevice);
+				_devicesPlatformsDevices.push_back(current);
 			}
 		}
 		catch (exception &ex) {
@@ -150,7 +112,7 @@ int ocl_device_utils::GetCountForPlatform(int platformID) {
 	for (const auto &platInfo : _devicesPlatformsDevices)
 	{
 		if (platformID == platInfo.PlatformNum) {
-			return platInfo.Devices.size();
+			return (int)platInfo.Devices.size();
 		}
 	}
 	return 0;
