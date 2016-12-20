@@ -16,12 +16,12 @@
 //#include <getopt.h>
 #include <errno.h>
 
-
 #include "opencl.h"
 
 #include <fstream>
 
-#include "sa_blake.h"
+#include <blake/blake.hpp>
+using namespace blake;
 
 typedef uint8_t		uchar;
 typedef uint32_t	uint;

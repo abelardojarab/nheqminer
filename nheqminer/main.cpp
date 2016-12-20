@@ -7,7 +7,7 @@
 
 #include "libstratum/StratumClient.h"
 
-#if defined(USE_OCL_XMP) || defined(USE_OCL_SILENTARMY)
+#if defined(USE_OCL_XMP) || defined(USE_OCL_SILENTARMY) || defined(USE_OCL_GATELESSGATE)
 #include "../ocl_device_utils/ocl_device_utils.h"
 #define PRINT_OCL_INFO
 #endif
@@ -28,8 +28,6 @@
 #include <boost/log/attributes.hpp>
 #include <boost/log/support/date_time.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
-
-#include <ocl/opencl.hpp>
 
 namespace logging = boost::log;
 namespace sinks = boost::log::sinks;
@@ -271,6 +269,7 @@ int main(int argc, char* argv[])
 	int opencl_device_count = 0;
 	int force_cpu_ext = -1;
 	int opencl_t = 0;
+	int use_gg = 1;
 
 	for (int i = 1; i < argc; ++i)
 	{
@@ -348,6 +347,7 @@ int main(int argc, char* argv[])
 				return 0;
 			case 'v':
 				use_old_xmp = atoi(argv[++i]);
+				use_gg = 0;
 				break;
 			case 'd':
 				while (opencl_device_count < 8 && i + 1 < argc)
@@ -363,6 +363,51 @@ int main(int argc, char* argv[])
 						break;
 					}
 				}
+				break;
+			case 'p':
+				opencl_platform = atoi(argv[++i]);
+				break;
+			case 't':
+				while (opencl_t < 8 && i + 1 < argc)
+				{
+					try
+					{
+						opencl_threads[opencl_t] = std::stol(argv[++i]);
+						++opencl_t;
+					}
+					catch (...)
+					{
+						--i;
+						break;
+					}
+				}
+				break;
+				// TODO extra parameters for OpenCL
+			}
+			break;
+		}
+		case 'g':
+		{
+			switch (argv[i][2])
+			{
+			case 'i':
+				print_opencl_info();
+				return 0;
+			case 'd':
+				while (opencl_device_count < 8 && i + 1 < argc)
+				{
+					try
+					{
+						opencl_enabled[opencl_device_count] = std::stol(argv[++i]);
+						++opencl_device_count;
+					}
+					catch (...)
+					{
+						--i;
+						break;
+					}
+				}
+				use_gg = 1;
 				break;
 			case 'p':
 				opencl_platform = atoi(argv[++i]);
@@ -535,6 +580,30 @@ int main(int argc, char* argv[])
 						ZMinerSSE2CUDA75_XMP_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
 					} else {
 						ZMinerSSE2CUDA80_XMP_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
+					}
+				}
+			}
+			else if (use_gg == 1) {
+				if (use_avx) {
+					if (use_cuda_sa) {
+						ZMinerAVXCUDASA80_GG_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
+					}
+					else if (use_old_cuda) {
+						ZMinerAVXCUDA75_GG_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
+					}
+					else {
+						ZMinerAVXCUDA80_GG_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
+					}
+				}
+				else {
+					if (use_cuda_sa) {
+						ZMinerSSE2CUDASA80_GG_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
+					}
+					else if (use_old_cuda) {
+						ZMinerSSE2CUDA75_GG_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
+					}
+					else {
+						ZMinerSSE2CUDA80_GG_doBenchmark(num_hashes, num_threads, cuda_device_count, cuda_enabled, cuda_blocks, cuda_tpb, opencl_device_count, opencl_platform, opencl_enabled, opencl_threads);
 					}
 				}
 			} else { // sarmy

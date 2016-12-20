@@ -435,3 +435,10 @@ template class StratumClient<ZMinerAVXCUDA75_SA, ZcashJob, EquihashSolution>;
 template class StratumClient<ZMinerSSE2CUDA75_SA, ZcashJob, EquihashSolution>;
 template class StratumClient<ZMinerAVXCUDASA80_SA, ZcashJob, EquihashSolution>;
 template class StratumClient<ZMinerSSE2CUDASA80_SA, ZcashJob, EquihashSolution>;
+// Gatelessgate
+template class StratumClient<ZMinerAVXCUDA80_GG, ZcashJob, EquihashSolution>;
+template class StratumClient<ZMinerSSE2CUDA80_GG, ZcashJob, EquihashSolution>;
+template class StratumClient<ZMinerAVXCUDA75_GG, ZcashJob, EquihashSolution>;
+template class StratumClient<ZMinerSSE2CUDA75_GG, ZcashJob, EquihashSolution>;
+template class StratumClient<ZMinerAVXCUDASA80_GG, ZcashJob, EquihashSolution>;
+template class StratumClient<ZMinerSSE2CUDASA80_GG, ZcashJob, EquihashSolution>;

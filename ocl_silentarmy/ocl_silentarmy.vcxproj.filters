@@ -2,12 +2,10 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="ocl_silentarmy.cpp" />
-    <ClCompile Include="sa_blake.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ocl_silentarmy.hpp" />
     <ClInclude Include="param.h" />
-    <ClInclude Include="sa_blake.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="zcash">

@@ -50,6 +50,11 @@ CREATE_SOLVER_STUB(ocl_xmp, "ocl_xmp_STUB")
 #else
 CREATE_SOLVER_STUB(ocl_silentarmy, "ocl_silentarmy_STUB")
 #endif
+#ifdef USE_OCL_GATELESSGATE
+#include "../ocl_gatelessgate/ocl_gatelessgate.hpp"
+#else
+CREATE_SOLVER_STUB(ocl_gatelessgate, "ocl_gatelessgate_STUB")
+#endif
 
 #include "../cuda_silentarmy/cuda_silentarmy.hpp"
 
@@ -171,6 +176,15 @@ typedef ZcashMiner<cpu_tromp, cuda_tromp_75, ocl_silentarmy> ZMinerSSE2CUDA75_SA
 typedef ZcashMiner<cpu_tromp, cuda_sa_solver, ocl_silentarmy> ZMinerSSE2CUDASA80_SA;
 typedef ZcashMiner<cpu_xenoncat, cuda_sa_solver, ocl_silentarmy> ZMinerAVXCUDASA80_SA;
 
+//ocl_gatelessgate
+typedef ZcashMiner<cpu_xenoncat, cuda_tromp, ocl_gatelessgate> ZMinerAVXCUDA80_GG;
+typedef ZcashMiner<cpu_tromp, cuda_tromp, ocl_gatelessgate> ZMinerSSE2CUDA80_GG;
+typedef ZcashMiner<cpu_xenoncat, cuda_tromp_75, ocl_gatelessgate> ZMinerAVXCUDA75_GG;
+typedef ZcashMiner<cpu_tromp, cuda_tromp_75, ocl_gatelessgate> ZMinerSSE2CUDA75_GG;
+typedef ZcashMiner<cpu_tromp, cuda_sa_solver, ocl_gatelessgate> ZMinerSSE2CUDASA80_GG;
+typedef ZcashMiner<cpu_xenoncat, cuda_sa_solver, ocl_gatelessgate> ZMinerAVXCUDASA80_GG;
+
+
 // ocl_xmp
 // gcc static undefined reference workaround
 void ZMinerAVXCUDA80_XMP_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
@@ -197,4 +211,17 @@ void ZMinerSSE2CUDA75_SA_doBenchmark(int hashes, int cpu_threads, int cuda_count
 void ZMinerAVXCUDASA80_SA_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
 	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);
 void ZMinerSSE2CUDASA80_SA_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
+	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);
+// ocl_gatelessgate
+void ZMinerAVXCUDA80_GG_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
+	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);
+void ZMinerSSE2CUDA80_GG_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
+	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);
+void ZMinerAVXCUDA75_GG_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
+	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);
+void ZMinerSSE2CUDA75_GG_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
+	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);
+void ZMinerAVXCUDASA80_GG_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
+	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);
+void ZMinerSSE2CUDASA80_GG_doBenchmark(int hashes, int cpu_threads, int cuda_count, int* cuda_en, int* cuda_b, int* cuda_t,
 	int opencl_count, int opencl_platf, int* opencl_en, int* opencl_t);

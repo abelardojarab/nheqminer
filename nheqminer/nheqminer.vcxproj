@@ -85,7 +85,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;USE_CPU_TROMP;USE_CPU_XENONCAT;USE_CUDA_TROMP;USE_OCL_XMP;USE_OCL_SILENTARMY;CONSOLE_COLORS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;USE_CPU_TROMP;USE_CPU_XENONCAT;USE_CUDA_TROMP;USE_OCL_XMP;USE_OCL_SILENTARMY;USE_OCL_GATELESSGATE;CONSOLE_COLORS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <EnableEnhancedInstructionSet>NotSet</EnableEnhancedInstructionSet>
       <AdditionalOptions>-D_WIN32_WINNT=0x0601 %(AdditionalOptions)</AdditionalOptions>
       <DisableSpecificWarnings>4068;4996;4503;4267;4180;4290;4244;4800;4334;4251</DisableSpecificWarnings>
@@ -97,7 +97,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>cuda_tromp.lib;cuda_tromp_75.lib;cpu_xenoncat.lib;cpu_tromp_SSE2.lib;cpu_tromp_AVX.lib;ocl_device_utils.lib;ocl_xpm.lib;ocl_silentarmy.lib;cuda_silentarmy.lib;OpenCL.lib</AdditionalDependencies>
+      <AdditionalDependencies>cuda_tromp.lib;cuda_tromp_75.lib;cpu_xenoncat.lib;cpu_tromp_SSE2.lib;cpu_tromp_AVX.lib;ocl_device_utils.lib;ocl_xpm.lib;ocl_silentarmy.lib;ocl_gatelessgate.lib;cuda_silentarmy.lib;OpenCL.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>.\trompequihash\pthreads\x64;..\3rdparty\libs\win64;$(AMDAPPSDKROOT)\lib\x86_64\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <LargeAddressAware>
       </LargeAddressAware>

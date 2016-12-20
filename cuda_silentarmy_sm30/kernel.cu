@@ -13,118 +13,8 @@
 #include <iostream>
 #include <stdint.h>
 
-
-//*blake header */
-
-typedef struct  blake2b_state_s
-{
-	uint64_t    h[8];
-	uint64_t    bytes;
-}               blake2b_state_t;
-
-void zcash_blake2b_init(blake2b_state_t *st, uint8_t hash_len, uint32_t n, uint32_t k);
-void zcash_blake2b_update(blake2b_state_t *st, const uint8_t *_msg,
-	uint32_t msg_len, uint32_t is_final);
-void zcash_blake2b_final(blake2b_state_t *st, uint8_t *out, uint8_t outlen);
-
-/* blake.cpp **/
-
-//static const uint32_t   blake2b_block_len = 128;
-static const uint32_t   blake2b_rounds = 12;
-static const uint64_t   blake2b_iv[8] =
-{
-	0x6a09e667f3bcc908ULL, 0xbb67ae8584caa73bULL,
-	0x3c6ef372fe94f82bULL, 0xa54ff53a5f1d36f1ULL,
-	0x510e527fade682d1ULL, 0x9b05688c2b3e6c1fULL,
-	0x1f83d9abfb41bd6bULL, 0x5be0cd19137e2179ULL,
-};
-static const uint8_t    blake2b_sigma[12][16] =
-{
-	{ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 },
-	{ 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3 },
-	{ 11,  8, 12,  0,  5,  2, 15, 13, 10, 14,  3,  6,  7,  1,  9,  4 },
-	{ 7,  9,  3,  1, 13, 12, 11, 14,  2,  6,  5, 10,  4,  0, 15,  8 },
-	{ 9,  0,  5,  7,  2,  4, 10, 15, 14,  1, 11, 12,  6,  8,  3, 13 },
-	{ 2, 12,  6, 10,  0, 11,  8,  3,  4, 13,  7,  5, 15, 14,  1,  9 },
-	{ 12,  5,  1, 15, 14, 13,  4, 10,  0,  7,  6,  3,  9,  2,  8, 11 },
-	{ 13, 11,  7, 14, 12,  1,  3,  9,  5,  0, 15,  4,  8,  6,  2, 10 },
-	{ 6, 15, 14,  9, 11,  3,  0,  8, 12,  2, 13,  7,  1,  4, 10,  5 },
-	{ 10,  2,  8,  4,  7,  6,  1,  5, 15, 11,  9, 14,  3, 12, 13,  0 },
-	{ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15 },
-	{ 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3 },
-};
-
-/*
-** Init the state according to Zcash parameters.
-*/
-void zcash_blake2b_init(blake2b_state_t *st, uint8_t hash_len,
-	uint32_t n, uint32_t k)
-{
-	st->h[0] = blake2b_iv[0] ^ (0x01010000 | hash_len);
-	for (uint32_t i = 1; i <= 5; i++)
-		st->h[i] = blake2b_iv[i];
-	st->h[6] = blake2b_iv[6] ^ *(uint64_t *)"DeepWebCa";
-	st->h[7] = blake2b_iv[7] ^ (((uint64_t)k << 32) | n);
-	st->bytes = 0;
-}
-
-static uint64_t rotr64(uint64_t a, uint8_t bits)
-{
-	return (a >> bits) | (a << (64 - bits));
-}
-
-static inline void mix64(uint64_t *va, uint64_t *vb, uint64_t *vc, uint64_t *vd,
-	uint64_t x, uint64_t y)
-{
-	*va = (*va + *vb + x);
-	*vd = rotr64(*vd ^ *va, 32);
-	*vc = (*vc + *vd);
-	*vb = rotr64(*vb ^ *vc, 24);
-	*va = (*va + *vb + y);
-	*vd = rotr64(*vd ^ *va, 16);
-	*vc = (*vc + *vd);
-	*vb = rotr64(*vb ^ *vc, 63);
-}
-
-/*
-** Process either a full message block or the final partial block.
-** Note that v[13] is not XOR'd because st->bytes is assumed to never overflow.
-**
-** _msg         pointer to message (must be zero-padded to 128 bytes if final block)
-** msg_len      must be 128 (<= 128 allowed only for final partial block)
-** is_final     indicate if this is the final block
-*/
-void zcash_blake2b_update(blake2b_state_t *st, const uint8_t *_msg,
-	uint32_t msg_len, uint32_t is_final)
-{
-	const uint64_t      *m = (const uint64_t *)_msg;
-	uint64_t            v[16];
-	memcpy(v + 0, st->h, 8 * sizeof(*v));
-	memcpy(v + 8, blake2b_iv, 8 * sizeof(*v));
-	v[12] ^= (st->bytes += msg_len);
-	v[14] ^= is_final ? -1 : 0;
-	for (uint32_t round = 0; round < blake2b_rounds; round++)
-	{
-		const uint8_t   *s = blake2b_sigma[round];
-		mix64(v + 0, v + 4, v + 8, v + 12, m[s[0]], m[s[1]]);
-		mix64(v + 1, v + 5, v + 9, v + 13, m[s[2]], m[s[3]]);
-		mix64(v + 2, v + 6, v + 10, v + 14, m[s[4]], m[s[5]]);
-		mix64(v + 3, v + 7, v + 11, v + 15, m[s[6]], m[s[7]]);
-		mix64(v + 0, v + 5, v + 10, v + 15, m[s[8]], m[s[9]]);
-		mix64(v + 1, v + 6, v + 11, v + 12, m[s[10]], m[s[11]]);
-		mix64(v + 2, v + 7, v + 8, v + 13, m[s[12]], m[s[13]]);
-		mix64(v + 3, v + 4, v + 9, v + 14, m[s[14]], m[s[15]]);
-	}
-	for (uint32_t i = 0; i < 8; i++)
-		st->h[i] ^= v[i] ^ v[i + 8];
-}
-
-void zcash_blake2b_final(blake2b_state_t *st, uint8_t *out, uint8_t outlen)
-{
-	memcpy(out, st->h, outlen);
-}
-
-/* end of blake cpp*/
+#include <blake/blake.hpp>
+using namespace blake;
 
 #define PARAM_N 200
 #define PARAM_K 9
@@ -178,7 +68,7 @@ typedef struct __align__(64) sols_s
 __device__ uint32_t rowCounter0[1 << NR_ROWS_LOG];
 __device__ uint32_t rowCounter1[1 << NR_ROWS_LOG];
 __device__ uint32_t* rowCounters[2] = { rowCounter0 , rowCounter1 };
-__device__ blake2b_state_t blake;
+__device__ blake2b_state_t blake_obj;
 __device__ sols_t sols;
 
 
@@ -263,6 +153,7 @@ __device__ uint well_aligned_int(ulong *_p, uint offset)
 	return *(uint *)(p + offset);
 }
 
+#if 0
 __device__ uint xor_and_store3(char* ht, uint tid, uint slot_a, uint slot_b, ulong* a, ulong* b, uint* rowCounters)
 {
 	ulong xi0, xi1, xi2, xi3;
@@ -293,9 +184,6 @@ __device__ uint xor_and_store3(char* ht, uint tid, uint slot_a, uint slot_b, ulo
 		"l"(a));
 
 	ulong test1 = half_aligned_long(a, 0);
-
-	printf("test1 %lX | %lX | %02X %02X %02X %02X\n", test1, test3, a0, a1, a2, a3);
-
 
 	// xor 20 bytes
 	xi0 = half_aligned_long(a, 0) ^ half_aligned_long(b, 0);
@@ -336,6 +224,8 @@ __device__ uint xor_and_store3(char* ht, uint tid, uint slot_a, uint slot_b, ulo
 
 	return 0;
 }
+
+#endif
 
 __device__ uint ht_store(uint round, char *ht, uint i,
 	ulong xi0, ulong xi1, ulong xi2, ulong xi3, uint *rowCounters)
@@ -475,14 +365,14 @@ void kernel_round0(char *ht, uint32_t inputs_per_thread, int offset)
 		// message block
 		ulong word1 = (ulong)input << 32;
 		// init vector v
-		v[0] = blake.h[0];
-		v[1] = blake.h[1];
-		v[2] = blake.h[2];
-		v[3] = blake.h[3];
-		v[4] = blake.h[4];
-		v[5] = blake.h[5];
-		v[6] = blake.h[6];
-		v[7] = blake.h[7];
+		v[0] = blake_obj.h[0];
+		v[1] = blake_obj.h[1];
+		v[2] = blake_obj.h[2];
+		v[3] = blake_obj.h[3];
+		v[4] = blake_obj.h[4];
+		v[5] = blake_obj.h[5];
+		v[6] = blake_obj.h[6];
+		v[7] = blake_obj.h[7];
 		v[8] = blake_iv[0];
 		v[9] = blake_iv[1];
 		v[10] = blake_iv[2];
@@ -608,13 +498,13 @@ void kernel_round0(char *ht, uint32_t inputs_per_thread, int offset)
 		// compress v into the blake state; this produces the 50-byte hash
 		// (two Xi values)
 		ulong h[7];
-		h[0] = blake.h[0] ^ v[0] ^ v[8];
-		h[1] = blake.h[1] ^ v[1] ^ v[9];
-		h[2] = blake.h[2] ^ v[2] ^ v[10];
-		h[3] = blake.h[3] ^ v[3] ^ v[11];
-		h[4] = blake.h[4] ^ v[4] ^ v[12];
-		h[5] = blake.h[5] ^ v[5] ^ v[13];
-		h[6] = (blake.h[6] ^ v[6] ^ v[14]) & 0xffff;
+		h[0] = blake_obj.h[0] ^ v[0] ^ v[8];
+		h[1] = blake_obj.h[1] ^ v[1] ^ v[9];
+		h[2] = blake_obj.h[2] ^ v[2] ^ v[10];
+		h[3] = blake_obj.h[3] ^ v[3] ^ v[11];
+		h[4] = blake_obj.h[4] ^ v[4] ^ v[12];
+		h[5] = blake_obj.h[5] ^ v[5] ^ v[13];
+		h[6] = (blake_obj.h[6] ^ v[6] ^ v[14]) & 0xffff;
 
 		// store the two Xi values in the hash table
 #if ZCASH_HASH_LEN == 50
@@ -657,9 +547,12 @@ __device__ uint xor_and_store(uint round, char *ht_dst, uint row,
 	uint slot_a, uint slot_b, ulong *a, ulong *b,
 	uint *rowCounters)
 {
+
+#if 0
 	if (round == 3) {
 		return xor_and_store3(ht_dst, row, slot_a, slot_b, a, b, rowCounters);
 	}
+#endif
 
 	ulong xi0, xi1, xi2;
 #if NR_ROWS_LOG >= 16 && NR_ROWS_LOG <= 20
@@ -1072,7 +965,7 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 	zcash_blake2b_init(&initialCtx, ZCASH_HASH_LEN, PARAM_N, PARAM_K);
 	zcash_blake2b_update(&initialCtx, (const uint8_t*)context, 128, 0);
 
-	checkCudaErrors(cudaMemcpyToSymbol(blake, &initialCtx, sizeof(blake2b_state_s), 0, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpyToSymbol(blake_obj, &initialCtx, sizeof(blake2b_state_s), 0, cudaMemcpyHostToDevice));
 
 	//const uint32_t THREAD_SHIFT = 8;
 	//const uint32_t THREAD_COUNT = 1 << THREAD_SHIFT;

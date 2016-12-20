@@ -8,7 +8,9 @@
 
 #include "sa_cuda_context.hpp"
 #include "param.h"
-#include "sa_blake.h"
+
+#include <blake/blake.hpp>
+using namespace blake;
 
 #define WN PARAM_N
 #define WK PARAM_K
@@ -59,7 +61,7 @@
 __device__ char rowCounter0[NR_ROWS];
 __device__ char rowCounter1[NR_ROWS];
 __device__ sols_t sols;
-__device__ blake2b_state_t blake;
+__device__ blake2b_state_t blake_obj;
 
 __constant__ ulong blake_iv[] =
 {
@@ -431,14 +433,14 @@ void kernel_round0(char *ht, uint *debug)
 		// message block
 		ulong word1 = (ulong)input << 32;
 		// init vector v
-		v[0] = blake.h[0];
-		v[1] = blake.h[1];
-		v[2] = blake.h[2];
-		v[3] = blake.h[3];
-		v[4] = blake.h[4];
-		v[5] = blake.h[5];
-		v[6] = blake.h[6];
-		v[7] = blake.h[7];
+		v[0] = blake_obj.h[0];
+		v[1] = blake_obj.h[1];
+		v[2] = blake_obj.h[2];
+		v[3] = blake_obj.h[3];
+		v[4] = blake_obj.h[4];
+		v[5] = blake_obj.h[5];
+		v[6] = blake_obj.h[6];
+		v[7] = blake_obj.h[7];
 		v[8] = blake_iv[0];
 		v[9] = blake_iv[1];
 		v[10] = blake_iv[2];
@@ -564,13 +566,13 @@ void kernel_round0(char *ht, uint *debug)
 		// compress v into the blake state; this produces the 50-byte hash
 		// (two Xi values)
 		ulong h[7];
-		h[0] = blake.h[0] ^ v[0] ^ v[8];
-		h[1] = blake.h[1] ^ v[1] ^ v[9];
-		h[2] = blake.h[2] ^ v[2] ^ v[10];
-		h[3] = blake.h[3] ^ v[3] ^ v[11];
-		h[4] = blake.h[4] ^ v[4] ^ v[12];
-		h[5] = blake.h[5] ^ v[5] ^ v[13];
-		h[6] = (blake.h[6] ^ v[6] ^ v[14]) & 0xffff;
+		h[0] = blake_obj.h[0] ^ v[0] ^ v[8];
+		h[1] = blake_obj.h[1] ^ v[1] ^ v[9];
+		h[2] = blake_obj.h[2] ^ v[2] ^ v[10];
+		h[3] = blake_obj.h[3] ^ v[3] ^ v[11];
+		h[4] = blake_obj.h[4] ^ v[4] ^ v[12];
+		h[5] = blake_obj.h[5] ^ v[5] ^ v[13];
+		h[6] = (blake_obj.h[6] ^ v[6] ^ v[14]) & 0xffff;
 
 		// store the two Xi values in the hash table
 #if ZCASH_HASH_LEN == 50
@@ -2474,7 +2476,7 @@ void sa_cuda_context::solve(const char * tequihash_header, unsigned int tequihas
 	zcash_blake2b_init(&initialCtx, ZCASH_HASH_LEN, PARAM_N, PARAM_K);
 	zcash_blake2b_update(&initialCtx, (const uint8_t*)context, 128, 0);
 
-	checkCudaErrors(cudaMemcpyToSymbol(blake, &initialCtx, sizeof(blake2b_state_s), 0, cudaMemcpyHostToDevice));
+	checkCudaErrors(cudaMemcpyToSymbol(blake_obj, &initialCtx, sizeof(blake2b_state_s), 0, cudaMemcpyHostToDevice));
 
 	for (unsigned round = 0; round < PARAM_K; round++) {
 		if (bUseOld) {

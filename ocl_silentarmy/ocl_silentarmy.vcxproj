@@ -12,12 +12,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="ocl_silentarmy.cpp" />
-    <ClCompile Include="sa_blake.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ocl_silentarmy.hpp" />
     <ClInclude Include="param.h" />
-    <ClInclude Include="sa_blake.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="zcash\gpu\input.cl" />
@@ -56,10 +54,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
+    <IncludePath>$(ProjectDir)../contrib/;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
     <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <IncludePath>$(ProjectDir)../contrib/;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
