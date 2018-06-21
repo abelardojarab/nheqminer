@@ -54,13 +54,16 @@ add_definitions(-DUSE_OCL_SILENTARMY)
 #add_library ( xenoncat_avx2 SHARED IMPORTED GLOBAL )
 #set_target_properties ( xenoncat_avx2 PROPERTIES IMPORTED_LOCATION "../../cpu_xenoncat/Linux/asm/equihash_avx2.o" )
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../nheqminer/)
-# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../ocl_device_utils/)
-
 # OCL INC DIR
 include_directories(${OPENCL_INCLUDE_DIRECTORY})
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel/AOCLUtils/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../nheqminer/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel/CL)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../ocl_device_utils/)
 
 set(SOURCE_FILES
     # sources
@@ -143,10 +146,10 @@ set(SOURCE_FILES
     ../../Intel/AOCLUtils/options.cpp
 
     # AMD ocl_xpm
-    ../../ocl_xpm/ocl_xmp.hpp
-    ../../ocl_xpm/ocl_xmp.cpp
-    ../../ocl_xpm/zcash/gpu/common.h
-    ../../cpu_tromp/blake2/blake2bx.cpp
+    # ../../ocl_xpm/ocl_xmp.hpp
+    # ../../ocl_xpm/ocl_xmp.cpp
+    # ../../ocl_xpm/zcash/gpu/common.h
+    # ../../cpu_tromp/blake2/blake2bx.cpp
     # AMD ocl_silentarmy
     ../../ocl_silentarmy/ocl_silentarmy.hpp
     ../../ocl_silentarmy/param.h
