@@ -63,7 +63,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel/CL)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../ocl_device_utils/)
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../ocl_device_utils/)
 
 set(SOURCE_FILES
     # sources
