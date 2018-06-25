@@ -55,15 +55,16 @@ add_definitions(-DUSE_OCL_SILENTARMY)
 #set_target_properties ( xenoncat_avx2 PROPERTIES IMPORTED_LOCATION "../../cpu_xenoncat/Linux/asm/equihash_avx2.o" )
 
 # OCL INC DIR
+include_directories(/opt/intelFPGA_pro/17.1/hld/host/include20)
+include_directories(/opt/intelFPGA_pro/17.1/hld/host/include20/CL)
 include_directories(${OPENCL_INCLUDE_DIRECTORY})
+
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../nheqminer/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../AOCLUtils)
-include_directories(/opt/intelFPGA_pro/17.1/hld/host/include)
-
-# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../ocl_device_utils/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../ocl_device_utils/)
 
 set(SOURCE_FILES
     # sources
@@ -137,8 +138,8 @@ set(SOURCE_FILES
 #
     # AMD ocl_device_utils
     # ../../ocl_device_utils/cl_ext.hpp
-    # ../../ocl_device_utils/ocl_device_utils.h
-    # ../../ocl_device_utils/ocl_device_utils.cpp
+    ../../ocl_device_utils/ocl_device_utils.h
+    ../../ocl_device_utils/ocl_device_utils.cpp
     # ../../ocl_device_utils/OpenCLDevice.h
     # ../../ocl_device_utils/opencl.h
     # ../../ocl_device_utils/opencl.cpp

@@ -29,6 +29,8 @@
 #include <boost/log/support/date_time.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
 
+#include "ocl_device_utils.h"
+
 namespace logging = boost::log;
 namespace sinks = boost::log::sinks;
 namespace src = boost::log::sources;

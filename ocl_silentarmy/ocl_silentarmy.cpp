@@ -16,6 +16,7 @@
 //#include <getopt.h>
 #include <errno.h>
 
+#include "CL/cl.h"
 #include "opencl.h"
 
 #include <fstream>
@@ -69,7 +70,7 @@ struct OclContext {
 	sols_t	*sols;
 
 	bool init(cl_device_id dev, unsigned threadsNum, unsigned threadsPerBlock);
-	
+
 	~OclContext() {
 		clReleaseMemObject(buf_dbg);
 		clReleaseMemObject(buf_ht[0]);
@@ -98,7 +99,7 @@ bool OclContext::init(
 	size_t              dbg_size = 1;
 #endif
 
-	buf_dbg = check_clCreateBuffer(_context, CL_MEM_READ_WRITE | CL_MEM_HOST_NO_ACCESS, dbg_size, NULL);
+	buf_dbg = check_clCreateBuffer(_context, CL_MEM_READ_WRITE, dbg_size, NULL); //  | CL_MEM_HOST_NO_ACCESS
 	buf_ht[0] = check_clCreateBuffer(_context, CL_MEM_READ_WRITE, HT_SIZE, NULL);
 	buf_ht[1] = check_clCreateBuffer(_context, CL_MEM_READ_WRITE, HT_SIZE, NULL);
 	buf_sols = check_clCreateBuffer(_context, CL_MEM_READ_WRITE, sizeof(sols_t), NULL);
@@ -361,7 +362,7 @@ static uint32_t verify_sol(sols_t *sols, unsigned sol_i)
 ocl_silentarmy::ocl_silentarmy(int platf_id, int dev_id) {
 	platform_id = platf_id;
 	device_id = dev_id;
-	// TODO 
+	// TODO
 	threadsNum = 8192;
 	wokrsize = 128; // 256;
 }
@@ -386,7 +387,7 @@ int ocl_silentarmy::getcount() {
 	return devices.size();
 }
 
-void ocl_silentarmy::getinfo(int platf_id, int d_id, std::string& gpu_name, int& sm_count, std::string& version) { 
+void ocl_silentarmy::getinfo(int platf_id, int d_id, std::string& gpu_name, int& sm_count, std::string& version) {
 	static auto devices = GetAllDevices(platf_id);
 
 	if (devices.size() <= d_id) {
@@ -428,7 +429,7 @@ void ocl_silentarmy::start(ocl_silentarmy& device_context) {
 	size_t nActualSize = 0;
 	cl_platform_id platform_id = nullptr;
 	cl_int rc = clGetDeviceInfo(device, CL_DEVICE_PLATFORM, sizeof(cl_platform_id), &platform_id, nullptr);
-	
+
 
 	device_context.oclc->_dev_id = device;
 	device_context.oclc->platform_id = platform_id;
@@ -566,4 +567,3 @@ void ocl_silentarmy::solve(const char *tequihash_header,
 }
 
 // STATICS END
-
