@@ -143,8 +143,8 @@ set(SOURCE_FILES
     # ../../ocl_device_utils/opencl.h
     # ../../ocl_device_utils/opencl.cpp
 
-    # ../../Intel/AOCLUtils/opencl.cpp
-    # ../../Intel/AOCLUtils/options.cpp
+    # ../../AOCLUtils/opencl.cpp
+    # ../../AOCLUtils/options.cpp
 
     # AMD ocl_xpm
     # ../../ocl_xpm/ocl_xmp.hpp

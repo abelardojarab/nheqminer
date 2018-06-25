@@ -8,7 +8,7 @@
 #include "libstratum/StratumClient.h"
 
 #if defined(USE_OCL_XMP) || defined(USE_OCL_SILENTARMY) || defined(USE_OCL_GATELESSGATE)
-#include "../ocl_device_utils/ocl_device_utils.h"
+#include "../AOCLUtils/opencl.h"
 #define PRINT_OCL_INFO
 #endif
 
@@ -70,8 +70,8 @@ static ZcashStratumClientAVXCUDASA80_SA* scSigAVXCSA80_SA = nullptr;
 static ZcashStratumClientSSE2CUDASA80_SA* scSigSSE2CSA80_SA = nullptr;
 
 
-extern "C" void stratum_sigint_handler(int signum) 
-{ 
+extern "C" void stratum_sigint_handler(int signum)
+{
 	if (scSigAVXC80_XMP) scSigAVXC80_XMP->disconnect();
 	if (scSigSSE2C80_XMP) scSigSSE2C80_XMP->disconnect();
 	if (scSigAVXC75_XMP) scSigAVXC75_XMP->disconnect();
@@ -227,8 +227,8 @@ void start_mining(int api_port, int cpu_threads, int cuda_device_count, int open
 			BOOST_LOG_TRIVIAL(info) << CL_YLW "Speed [" << INTERVAL_SECONDS << " sec]: " <<
 				speed.GetHashSpeed() << " I/s, " <<
 				speed.GetSolutionSpeed() << " Sols/s" <<
-				//accepted << " AS/min, " << 
-				//(allshares - accepted) << " RS/min" 
+				//accepted << " AS/min, " <<
+				//(allshares - accepted) << " RS/min"
 				CL_N;
 		}
 		if (api) while (api->poll()) {}
@@ -636,4 +636,3 @@ int main(int argc, char* argv[])
 
 	return 0;
 }
-
