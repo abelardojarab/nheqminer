@@ -60,6 +60,9 @@ include_directories(${OPENCL_INCLUDE_DIRECTORY})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../nheqminer/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/)
 
+include_directories(/opt/intelFPGA_pro/17.1/hld/host/include)
+include_directories(/opt/intelFPGA_pro/17.1/hld/host/include/CL)
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel/CL)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel)
 
@@ -142,8 +145,9 @@ set(SOURCE_FILES
     # ../../ocl_device_utils/OpenCLDevice.h
     # ../../ocl_device_utils/opencl.h
     # ../../ocl_device_utils/opencl.cpp
-    ../../Intel/AOCLUtils/opencl.cpp
-    ../../Intel/AOCLUtils/options.cpp
+
+    # ../../Intel/AOCLUtils/opencl.cpp
+    # ../../Intel/AOCLUtils/options.cpp
 
     # AMD ocl_xpm
     # ../../ocl_xpm/ocl_xmp.hpp
