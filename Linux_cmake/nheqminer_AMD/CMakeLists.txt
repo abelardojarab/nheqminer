@@ -60,11 +60,8 @@ include_directories(${OPENCL_INCLUDE_DIRECTORY})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../nheqminer/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/)
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../AOCLUtils)
 include_directories(/opt/intelFPGA_pro/17.1/hld/host/include)
-include_directories(/opt/intelFPGA_pro/17.1/hld/host/include/CL)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel/CL)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../Intel)
 
 # include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../ocl_device_utils/)
 
