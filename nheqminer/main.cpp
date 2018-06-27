@@ -8,7 +8,7 @@
 #include "libstratum/StratumClient.h"
 
 #if defined(USE_OCL_XMP) || defined(USE_OCL_SILENTARMY) || defined(USE_OCL_GATELESSGATE)
-#include "../AOCLUtils/opencl.h"
+#include "opencl.h"
 #define PRINT_OCL_INFO
 #endif
 

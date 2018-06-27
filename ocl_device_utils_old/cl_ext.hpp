@@ -163,7 +163,7 @@
 #endif
 #endif // _WIN32
 
-//
+// 
 #if defined(USE_CL_DEVICE_FISSION)
 #include <CL/cl_ext.h> // AMD topology not needed here
 #endif
@@ -183,13 +183,13 @@
 #if defined(CL_VERSION_1_2) && !defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS)
 #define __CL_EXPLICIT_CONSTRUCTORS explicit
 #else // #if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS)
-#define __CL_EXPLICIT_CONSTRUCTORS
+#define __CL_EXPLICIT_CONSTRUCTORS 
 #endif // #if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS)
 
 // Define deprecated prefixes and suffixes to ensure compilation
 // in case they are not pre-defined
 #if !defined(CL_EXT_PREFIX__VERSION_1_1_DEPRECATED)
-#define CL_EXT_PREFIX__VERSION_1_1_DEPRECATED
+#define CL_EXT_PREFIX__VERSION_1_1_DEPRECATED  
 #endif // #if !defined(CL_EXT_PREFIX__VERSION_1_1_DEPRECATED)
 #if !defined(CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED)
 #define CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED
@@ -208,7 +208,7 @@
 
 #if !defined(__NO_STD_STRING)
 #include <string>
-#endif
+#endif 
 
 #if defined(__linux__) || defined(__APPLE__) || defined(__MACOSX)
 #include <alloca.h>
@@ -232,7 +232,7 @@ namespace cl {
 	/**
 	* Deprecated APIs for 1.2
 	*/
-#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2))
+#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2)) 
 #define __INIT_CL_EXT_FCN_PTR(name) \
     if(!pfn_##name) { \
         pfn_##name = (PFN_##name) \
@@ -439,7 +439,7 @@ namespace cl {
 	/**
 	* Deprecated APIs for 1.2
 	*/
-#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2))
+#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2)) 
 #define __ENQUEUE_MARKER_ERR                __ERR_STR(clEnqueueMarker)
 #define __ENQUEUE_WAIT_FOR_EVENTS_ERR       __ERR_STR(clEnqueueWaitForEvents)
 #define __ENQUEUE_BARRIER_ERR               __ERR_STR(clEnqueueBarrier)
@@ -463,7 +463,7 @@ namespace cl {
 
 #if !defined(__USE_DEV_STRING) && !defined(__NO_STD_STRING)
 	typedef std::string STRING_CLASS;
-#elif !defined(__USE_DEV_STRING)
+#elif !defined(__USE_DEV_STRING) 
 
 	/*! \class string
 	* \brief Simple string class, that provides a limited subset of std::string
@@ -641,12 +641,12 @@ namespace cl {
 		const char * c_str(void) const { return (str_) ? str_ : ""; }
 	};
 	typedef cl::string STRING_CLASS;
-#endif // #elif !defined(__USE_DEV_STRING)
+#endif // #elif !defined(__USE_DEV_STRING) 
 
 #if !defined(__USE_DEV_VECTOR) && !defined(__NO_STD_VECTOR)
 #define VECTOR_CLASS std::vector
-#elif !defined(__USE_DEV_VECTOR)
-#define VECTOR_CLASS cl::vector
+#elif !defined(__USE_DEV_VECTOR) 
+#define VECTOR_CLASS cl::vector 
 
 #if !defined(__MAX_DEFAULT_VECTOR_SIZE)
 #define __MAX_DEFAULT_VECTOR_SIZE 10
@@ -1017,7 +1017,7 @@ namespace cl {
 
 
 	namespace detail {
-#define __DEFAULT_NOT_INITIALIZED 1
+#define __DEFAULT_NOT_INITIALIZED 1 
 #define __DEFAULT_BEING_INITIALIZED 2
 #define __DEFAULT_INITIALIZED 4
 
@@ -1401,6 +1401,7 @@ namespace cl {
     F(cl_device_info, CL_DEVICE_REFERENCE_COUNT, cl_uint) \
     F(cl_device_info, CL_DEVICE_PREFERRED_INTEROP_USER_SYNC, ::size_t) \
     F(cl_device_info, CL_DEVICE_PARTITION_AFFINITY_DOMAIN, cl_device_affinity_domain) \
+	F(cl_device_info, CL_DEVICE_TOPOLOGY_AMD, cl_device_topology_amd) \
     F(cl_device_info, CL_DEVICE_BUILT_IN_KERNELS, STRING_CLASS)
 #endif // #if defined(CL_VERSION_1_2)
 
@@ -5976,7 +5977,7 @@ struct param_traits<detail:: token,param_name>       \
 		/**
 		* Deprecated APIs for 1.2
 		*/
-#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2))
+#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2)) 
 		CL_EXT_PREFIX__VERSION_1_1_DEPRECATED
 			cl_int enqueueMarker(Event* event = NULL) const CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED
 		{
@@ -6121,7 +6122,7 @@ struct param_traits<detail:: token,param_name>       \
 		/**
 		* Deprecated APIs for 1.2
 		*/
-#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2))
+#if defined(CL_USE_DEPRECATED_OPENCL_1_1_APIS) || (defined(CL_VERSION_1_1) && !defined(CL_VERSION_1_2)) 
 		CL_EXT_PREFIX__VERSION_1_1_DEPRECATED
 			cl_int enqueueBarrier() const CL_EXT_SUFFIX__VERSION_1_1_DEPRECATED
 		{
@@ -12341,8 +12342,8 @@ struct param_traits<detail:: token,param_name>       \
 #undef __PARAM_NAME_DEVICE_FISSION
 #endif // USE_CL_DEVICE_FISSION
 
-#undef __DEFAULT_NOT_INITIALIZED
-#undef __DEFAULT_BEING_INITIALIZED
+#undef __DEFAULT_NOT_INITIALIZED 
+#undef __DEFAULT_BEING_INITIALIZED 
 #undef __DEFAULT_INITIALIZED
 
 } // namespace cl

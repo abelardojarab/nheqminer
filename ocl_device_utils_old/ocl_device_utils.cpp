@@ -104,7 +104,7 @@ bool ocl_device_utils::QueryDevices() {
 		}
 		return true;
 	}
-
+	
 	return false;
 }
 
@@ -122,7 +122,7 @@ void ocl_device_utils::PrintDevices() {
 	cout << "Number of OpenCL devices found: " << _AllDevices.size() << endl;
 	for (unsigned int i = 0; i < _AllDevices.size(); ++i) {
 		auto& item = _AllDevices[i];
-		auto platform = cl::Platform(item.getInfo<CL_DEVICE_PLATFORM>());
+		auto& platform = cl::Platform(item.getInfo<CL_DEVICE_PLATFORM>());
 		cout << "Device #" << i << " | " << platform.getInfo<CL_PLATFORM_NAME>() << " | " << item.getInfo<CL_DEVICE_NAME>();
 
 		switch (item.getInfo<CL_DEVICE_TYPE>()) {
